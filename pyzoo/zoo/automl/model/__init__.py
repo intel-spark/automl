@@ -15,5 +15,5 @@
 #
 
 from .base import *
-from .vanilla_lstm import *
-from .seq2seq import *
+from .VanillaLSTM import *
+from .Seq2Seq import *

@@ -14,20 +14,3 @@
 # limitations under the License.
 #
 
-
-def roll(df, past_seqlen, future_seqlen, y_timeindex=False):
-    """
-    roll dataframe into sequence samples to be used in TimeSequencePredictor.
-    :param df: a dataframe which has been resampled in uniform frequency.
-    :param past_seqlen: the length of the past sequence
-    :param future_seqlen: the length of the future sequence
-    :param y_timeindex: whether to retain the time index col in the y
-    :return: tuple (x,y) which can be used directly in TimeSequencePredictor.fit, evaluate
-        x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
-        dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
-        the 2nd col is the target value (data type should be numeric)
-        y: If y_timeindex=True, y is 3-d numpy array in format (no. of samples, future sequence length, 2).
-        Otherwise, y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
-        length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
-    """
-    return (None, None)

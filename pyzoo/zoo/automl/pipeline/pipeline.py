@@ -14,3 +14,32 @@
 # limitations under the License.
 #
 
+
+class Pipeline(object):
+    """
+    The pipeline object which is used to store the series of transformation of features and model
+    """
+    def __init__(self, feature_transformers, model):
+        """
+        initialize a pipeline
+        :param model: the internal model
+        :param feature_transformers: the feature transformers
+        """
+        self.model = model
+        self.feature_transformers = feature_transformers
+
+    def save(self, file):
+        """
+        save the pipeline to a file
+        :param file: the pipeline file
+        :return: a pipeline object
+        """
+        pass
+
+    def restore(self, file):
+        """
+        restore the pipeline from a file
+        :param file: the pipeline file
+        :return:
+        """
+        pass
