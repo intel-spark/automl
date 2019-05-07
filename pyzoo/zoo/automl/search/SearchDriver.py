@@ -108,14 +108,14 @@ class SearchDriver(object):
             inputshape_y = x_train.shape[-1]
             # TODO add input_shape_x and into config
 
-            model.build(**config)
+            #model.build(**config)
             # print(model.metrics_names)
             # callbacks = [TuneCallback(tune_reporter)]
             # fit model
             best_reward_m = -999
             reward_m = -999
             for i in range(1, 101):
-                result = model.fit_iter(x_train, y_train, validation_data=validation_data, **config),
+                result = model.fit_eval(x_train, y_train, validation_data=validation_data, **config),
                 if metric == "mean_squared_error":
                     reward_m = (-1) * result
                     # print("running iteration: ",i)

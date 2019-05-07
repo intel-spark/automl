@@ -18,6 +18,10 @@ from abc import ABC, abstractmethod
 
 
 class BaseFeatures(ABC):
+    """
+    Abstract Base class for Feature transformers.
+    """
+    check_optional_config = False
 
     @abstractmethod
     def fit_transform(self, input_df, **config):
@@ -55,3 +59,32 @@ class BaseFeatures(ABC):
         :return:
         """
         pass
+
+    @abstractmethod
+    def _get_required_parameters(self):
+        """
+        :return: required parameters to be set into config
+        """
+        return set()
+
+    @abstractmethod
+    def _get_optional_parameters(self):
+        """
+        :return: optional parameters to be set into config
+        """
+        return set()
+
+    def _check_config(self, **config):
+        """
+        Do necessary checking for config
+        :param config:
+        :return:
+        """
+        config_parameters = set(config.keys())
+        if not config_parameters.issuperset(self._get_required_parameters()):
+            raise ValueError("Missing required parameters in configuration. " +
+                             "Required parameters are: " + str(self._get_required_parameters()))
+        if self.check_optional_config and not config_parameters.issuperset(self._get_optional_parameters()):
+            raise ValueError("Missing optional parameters in configuration. " +
+                             "Optional parameters are: " + str(self._get_optional_parameters()))
+        return True

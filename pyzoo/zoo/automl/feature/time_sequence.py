@@ -148,3 +148,49 @@ class TimeSequenceFeatures(BaseFeatures):
         # roll data and prepare into array x and y
         (x, y) = self._roll(data_n)
         return x, y
+
+
+from zoo.automl.common.util import load_nytaxi_data
+
+
+class DummyTimeSequenceFeatures(BaseFeatures):
+    """
+    A Dummy Feature Transformer that just load prepared data
+    use flag train=True or False in config to return train or test
+    """
+
+    def __init__(self, filepath):
+        """
+        the prepared data path saved by in numpy.savez
+        file contains 4 arrays: "x_train", "y_train", "x_test", "y_test"
+        :param filepath: the filepath of the npz
+        """
+        x_train, y_train, x_test, y_test = load_nytaxi_data(filepath)
+        self.train_data = (x_train, y_train)
+        self.test_data = (x_test, y_test)
+        self.config = {"train": True}
+
+    def _get_data(self, train=True):
+        if train:
+            return self.train_data
+        else:
+            return self.test_data
+
+    def fit_transform(self, input_df, **config):
+        """
+
+        :param input_df:
+        :param config:
+        :return:
+        """
+        self.config = config
+        return self._get_data(train=True)
+
+    def transform(self, input_df):
+        return self._get_data(train=False)
+
+    def _get_optional_parameters(self):
+        return set()
+
+    def _get_required_parameters(self):
+        return set()

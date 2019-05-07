@@ -31,7 +31,7 @@ class TimeSequenceModel(BaseModel):
         """
         pass
 
-    def fit_iter(self, x, y, validation_data=None, **config):
+    def fit_eval(self, x, y, validation_data=None, **config):
         """
         optimize for one iteration for tuning
         :param config: tunable parameters for optimization

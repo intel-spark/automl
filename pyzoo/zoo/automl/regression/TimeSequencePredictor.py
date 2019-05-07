@@ -18,8 +18,9 @@
 import numpy as np
 from zoo.automl.search.SearchDriver import SearchDriver
 from zoo.automl.model import VanillaLSTM
-from zoo.automl.feature.time_sequence import TimeSequenceFeatures
+from zoo.automl.feature.time_sequence import TimeSequenceFeatures, DummyTimeSequenceFeatures
 from zoo.automl.model.time_sequence import TimeSequenceModel
+from zoo.automl.common.util import *
 
 import os
 
@@ -153,14 +154,20 @@ class TimeSequencePredictor(object):
                   'stop': stop}
 
         searcher = SearchDriver()
-        searcher.run(input_df,
-                     feature_transformers=TimeSequenceFeatures,
-                     model=TimeSequenceModel,
-                     validation_df=validation_df,
-                     metric=metric,
-                     **config)
-        return searcher.get_pipeline()
+        trials = searcher.run(input_df,
+                              #feature_transformers=TimeSequenceFeatures,
+                              feature_transformers=DummyTimeSequenceFeatures, #use dummy features for testing the rest
+                              model=TimeSequenceModel,
+                              validation_df=validation_df,
+                              metric=metric,
+                              **config)
+        return searcher.get_pipeline(trials)
 
 
 if __name__ == "__main__":
+    train_df, test_df = load_nytaxi_data_df("../../../../data/nyc_taxi.csv")
+    #print(train_df.describe())
+    #print(test_df.describe())
+
     tsp = TimeSequencePredictor()
+    tsp.fit_()

@@ -85,7 +85,7 @@ class BaseModel(ABC):
 
     def _check_config(self, **config):
         """
-        Get config and do necessary checking
+        Do necessary checking for config
         :param config:
         :return:
         """
