@@ -53,7 +53,7 @@ class TimeSequencePredictor(object):
     def fit(self, input_df,
             dt_col="datetime",
             target_col="value",
-            extra_features_col=[],
+            extra_features_col=None,
             validation_df=None,
             metric="mean_squared_error"):
         """
@@ -71,14 +71,15 @@ class TimeSequencePredictor(object):
         "r_square"
         :return: self
         """
-        self.pipeline = self.__tune(input_df, dt_col, target_col, extra_features_col, validation_df, metric)
+        self.pipeline = self._hp_search(input_df, dt_col, target_col, extra_features_col, validation_df, metric)
         return self
 
     def evaluate(self, input_df,
                  dt_col="datetime",
                  target_col="value",
-                 extra_features_col=[],
-                 metric=["mean_squared_error"]):
+                 extra_features_col=None,
+                 metric=None
+                 ):
         """
         Evaluate the model on a list of metrics.
         :param input_df: The input time series data frame, Example:
@@ -96,7 +97,7 @@ class TimeSequencePredictor(object):
     def predict(self, input_df,
                 dt_col="datetime",
                 target_col="value",
-                extra_features_col=[]):
+                extra_features_col=None):
         """
         Predict future sequence from past sequence.
         :param input_df: The input time series data frame, Example:
@@ -114,7 +115,7 @@ class TimeSequencePredictor(object):
         """
         return self.pipeline.evaluate(input_df, dt_col, target_col, extra_features_col)
 
-    def hp_search(self, input_df, dt_col, target_col, extra_features_col, validation_df, metric):
+    def _hp_search(self, input_df, dt_col, target_col, extra_features_col, validation_df, metric):
         # we may have to retrain thie tune.sample_from
         feature_list = ["WEEKDAY(datetime)", "HOUR(datetime)",
                         "PERCENTILE(value)", "IS_WEEKEND(datetime)",
@@ -150,13 +151,15 @@ class TimeSequencePredictor(object):
                   'target_list': target_list,
                   'space': space,
                   'stop': stop}
-        TuneDriver.run(input_df,
-                       feature_transformers=TimeSequenceFeatures,
-                       model=TimeSequenceModel,
-                       validation_df=validation_df,
-                       metric=metric,
-                       **config)
-        return TuneDriver.get_pipeline()
+
+        searcher = SearchDriver()
+        searcher.run(input_df,
+                     feature_transformers=TimeSequenceFeatures,
+                     model=TimeSequenceModel,
+                     validation_df=validation_df,
+                     metric=metric,
+                     **config)
+        return searcher.get_pipeline()
 
 
 if __name__ == "__main__":

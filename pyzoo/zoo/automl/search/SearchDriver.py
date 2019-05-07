@@ -69,9 +69,9 @@ class SearchDriver(object):
         train_func = self.__prepare_train_func(self, input_df, feature_transformers, model, validation_df, metric)
         trials = self.__run_trials(train_func, **config)
         # TODO ensemble models
-        return self.__get_pipeline(trials)
+        return trials
 
-    def __get_pipeline(self, trials):
+    def get_pipeline(self, trials):
         sorted_trials = get_sorted_trials(trials, metric="reward_metric")
         best_trial = sorted_trials[0]
         # load best model TODO

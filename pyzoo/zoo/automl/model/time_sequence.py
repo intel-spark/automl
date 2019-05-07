@@ -23,7 +23,7 @@ class TimeSequenceModel(BaseModel):
     TimeSequenceModel. Includes model selection (candidates are time sequence or vanila lstm)
     """
 
-    def build(self, **config):
+    def _build(self, **config):
         """
         build a model from config. This operation involves model selection step.
         :param config: tunable arguments for the model
