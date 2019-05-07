@@ -16,7 +16,7 @@
 
 
 import numpy as np
-from zoo.automl.tune.TuneDriver import TuneDriver
+from zoo.automl.search.SearchDriver import SearchDriver
 from zoo.automl.model import VanillaLSTM
 from zoo.automl.feature.time_sequence import TimeSequenceFeatures
 from zoo.automl.model.time_sequence import TimeSequenceModel
@@ -48,7 +48,7 @@ class TimeSequencePredictor(object):
         """
         self.logs_dir = logs_dir
         self.pipeline = None
-        self.tune = TuneDriver()
+        self.tune = SearchDriver()
 
     def fit(self, input_df,
             dt_col="datetime",
@@ -114,7 +114,7 @@ class TimeSequencePredictor(object):
         """
         return self.pipeline.evaluate(input_df, dt_col, target_col, extra_features_col)
 
-    def __tune(self, input_df, dt_col, target_col, extra_features_col, validation_df, metric):
+    def hp_search(self, input_df, dt_col, target_col, extra_features_col, validation_df, metric):
         # we may have to retrain thie tune.sample_from
         feature_list = ["WEEKDAY(datetime)", "HOUR(datetime)",
                         "PERCENTILE(value)", "IS_WEEKEND(datetime)",

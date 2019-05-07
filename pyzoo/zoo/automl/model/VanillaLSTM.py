@@ -19,7 +19,7 @@ from keras.layers import Dense, LSTM, Dropout
 import keras
 import os
 
-from zoo.automl.model.base import BaseModel
+from zoo.automl.model.abstract import BaseModel
 from zoo.automl.common.util import *
 from zoo.automl.common.metrics import Evaluator
 

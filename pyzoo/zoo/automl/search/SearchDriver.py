@@ -21,7 +21,6 @@ from ray import tune
 from zoo.automl.common.tunehelper import *
 
 
-
 class GoodError(Exception):
     pass
 
@@ -43,7 +42,7 @@ def test_reporter(train_func):
     raise Exception("Didn't call reporter...")
 
 
-class TuneDriver(object):
+class SearchDriver(object):
     """
     Tune driver
     """
@@ -95,6 +94,7 @@ class TuneDriver(object):
         :param metric: the rewarding metric
         :return: the train function
         """
+
         def train_func(config, tune_reporter):
             # prepare data
             (x_train, y_train) = feature_transformers.fit_transform(input_df, **config)

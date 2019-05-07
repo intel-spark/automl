@@ -14,6 +14,6 @@
 # limitations under the License.
 #
 
-from .base import *
+from .abstract import *
 from .VanillaLSTM import *
 from .Seq2Seq import *

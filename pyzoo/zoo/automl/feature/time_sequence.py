@@ -14,12 +14,14 @@
 # limitations under the License.
 #
 
+from zoo.automl.feature.abstract import BaseFeatures
+
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import pandas as pd
 import numpy as np
 
 
-class TimeSequenceFeatures(object):
+class TimeSequenceFeatures(BaseFeatures):
     """
     TimeSequence feature engineering
     """
@@ -49,9 +51,9 @@ class TimeSequenceFeatures(object):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        self.config = self.__get_feat_config(**config)
-        (x, y) = self.__run(**self.config)
-        return (x, y)
+        self.config = self._get_feat_config(**config)
+        (x, y) = self._run(**self.config)
+        return x, y
 
     def transform(self, input_df):
         """
@@ -67,10 +69,10 @@ class TimeSequenceFeatures(object):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        if (self.config == None):
+        if self.config is None:
             raise Exception("Needs to call fit_transform first before calling transform")
-        (x, y) = self.__run(input_df, **self.config)
-        return (x, y)
+        (x, y) = self._run(input_df, **self.config)
+        return x, y
 
     def save(self, file):
         """
@@ -89,7 +91,7 @@ class TimeSequenceFeatures(object):
         """
         pass
 
-    def __get_feat_config(self, config):
+    def _get_feat_config(self, config):
         """
         Get feature related arguments from global hyper parameter config and do necessary error checking
         :param config: the global config (usually from hyper paramter tuning)
@@ -98,7 +100,7 @@ class TimeSequenceFeatures(object):
         feat_config = {"dummy_arg1": 1, "dummy_arg2": 2}
         return feat_config
 
-    def __check(self, input_df):
+    def _check_input(self, input_df):
         """
         Check dataframe for integrity. Requires time sequence to come in uniform sampling intervals.
         :param input_df:
@@ -106,7 +108,7 @@ class TimeSequenceFeatures(object):
         """
         return input_df
 
-    def __roll(self, dataframe, past_seqlen, future_seqlen):
+    def _roll(self, dataframe, past_seqlen, future_seqlen):
         """
         roll dataframe into sequence samples to be used in TimeSequencePredictor.
         :param df: a dataframe which has been resampled in uniform frequency.
@@ -114,9 +116,9 @@ class TimeSequenceFeatures(object):
         :param future_seqlen: the length of the future sequence
         :return: tuple (x,y)
         """
-        return (None, None)
+        return None, None
 
-    def __scale(self, data):
+    def _scale(self, data):
         """
         Scale the data
         :param data:
@@ -127,7 +129,7 @@ class TimeSequenceFeatures(object):
         data_s = pd.DataFrame(np_scaled)
         return data_s
 
-    def __run(self, input_df, **config):
+    def _run(self, input_df, **config):
         # check input dataframe for missing values
         # generate features
         # TODO generate features for input_df using featuretools or other.
@@ -142,7 +144,7 @@ class TimeSequenceFeatures(object):
 
         data_n = input_df[cols]
         # select and standardize data
-        data_n = self.__scale(data_n)
+        data_n = self._scale(data_n)
         # roll data and prepare into array x and y
-        (x, y) = self.__roll(data_n)
-        return (x, y)
+        (x, y) = self._roll(data_n)
+        return x, y

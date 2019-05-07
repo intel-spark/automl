@@ -15,13 +15,14 @@
 #
 
 from zoo.automl.model.VanillaLSTM import VanillaLSTM
-from zoo.automl.model.base import BaseModel
+from zoo.automl.model.abstract import BaseModel
 
 
 class TimeSequenceModel(BaseModel):
     """
     TimeSequenceModel. Includes model selection (candidates are time sequence or vanila lstm)
     """
+
     def build(self, **config):
         """
         build a model from config. This operation involves model selection step.
@@ -71,3 +72,22 @@ class TimeSequenceModel(BaseModel):
         :return: the restored model
         """
         pass
+
+    def _get_required_parameters(self):
+        return {
+            'input_shape_x',
+            'input_shape_y',
+            'out_units'
+        }
+
+    def _get_optional_parameters(self):
+        return {
+            'lstm_1_units',
+            'dropout_1',
+            'lstm_2_units',
+            'dropout_2',
+            'metric',
+            'lr',
+            'epochs',
+            'batch_size'
+        }
