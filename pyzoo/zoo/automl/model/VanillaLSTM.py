@@ -20,40 +20,47 @@ import keras
 import os
 
 from zoo.automl.model.base import BaseModel
+from zoo.automl.common.util import *
+from zoo.automl.common.metrics import Evaluator
 
 
 class VanillaLSTM(BaseModel):
 
-    def __init__(self):
+    def __init__(self, check_optional_config=True):
         """
         Constructor of Vanilla LSTM model
         """
         self.model = None
+        self.check_optional_config = check_optional_config
 
-    def build(self, **config):
+    def _build(self, **config):
         """
         build vanilla LSTM model
         :param config: model hyper parameters
         :return: self
         """
-        model = Sequential()
-        model.add(LSTM(
-            input_shape=(config['input_shape_x'], config['inputshape_y']),
-            units=config['lstm_1_units'],
+        super()._check_config(**config)
+        self.metric = config.get('metric', 'mean_squared_error')
+        self.model = Sequential()
+        self.model.add(LSTM(
+            input_shape=(config.get('input_shape_x', 20),
+                         config.get('input_shape_y', 20)),
+            units=config.get('lstm_1_units', 20),
             return_sequences=True))
-        model.add(Dropout(config['dropout_1']))
+        self.model.add(Dropout(config.get('dropout_1', 0.2)))
 
-        model.add(LSTM(
-            units=config['lstm_2_units'],
+        self.model.add(LSTM(
+            units=config.get('lstm_2_units', 10),
             return_sequences=False))
-        model.add(Dropout(config['dropout_2']))
+        self.model.add(Dropout(config.get('dropout_2', 0.2)))
 
-        model.add(Dense(units=config['out_units']))
-        model.compile(loss='mse', metrics=[config['metric']], optimizer=keras.optimizers.RMSprop(lr=config['lr']))
-        self.model = model
+        self.model.add(Dense(units=config.get('out_units', 1)))
+        self.model.compile(loss='mse',
+                           metrics=[self.metric],
+                           optimizer=keras.optimizers.RMSprop(lr=config.get('lr', 0.001)))
         return self
 
-    def fit_iter(self, x, y, validation_data=None, verbose=0, epochs=1, batchsize=32):
+    def fit_eval(self, x, y, validation_data=None, **config):
         """
         fit for one iteration
         :param x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
@@ -67,34 +74,44 @@ class VanillaLSTM(BaseModel):
         :param config: optimization hyper parameters
         :return: the resulting metric
         """
-        if (self.model == None):
-            raise Exception("Model is not initialized. Call build() or restore() first before calling fit")
+        # if model is not initialized, __build the model
+        if self.model is None:
+            self._build(**config)
 
-        self.model.fit(x, y, validation_data, verbose, epochs, batchsize)
-        ##TODO, get metrics value from History instead of recalculating
-        if validation_data == None:
-            results = self.model.evaluate(x, y)
+        hist = self.model.fit(x, y,
+                              validation_data=validation_data,
+                              batch_size=config.get('batch_size', 32),
+                              epochs=config.get('epochs', 20),
+                              verbose=0
+                              )
+        # print(hist.history)
+        if validation_data is None:
+            # get train metrics
+            # results = self.model.evaluate(x, y)
+            result = hist.history.get(self.metric)[0]
         else:
-            results = self.model.evaluate(validation_data)
-        return results[1]
+            result = hist.history.get('val_' + str(self.metric))[0]
+        return result
 
-    def evaluate(self, x, y, metric=None):
+    def evaluate(self, x, y, metric=['mean_squared_error']):
         """
-        Evaluate the model
+        Evaluate on x, y
         :param x: input
         :param y: target
-        :param metric:
+        :param metric: a list of metrics in string format
         :return: a list of metric evaluation results
         """
-        pass
+        e = Evaluator()
+        y_pred = self.predict(x)
+        return [e.evaluate(m, y, y_pred) for m in metric]
 
     def predict(self, x):
         """
-        Prediction.
+        Prediction on x.
         :param x: input
-        :return: result
+        :return: predicted y
         """
-        pass
+        return self.model.predict(x)
 
     def save(self, filename="weights_tune_tmp.h5"):
         """
@@ -114,16 +131,38 @@ class VanillaLSTM(BaseModel):
         """
         pass
 
+    def _get_required_parameters(self):
+        return {
+            'input_shape_x',
+            'input_shape_y',
+            'out_units'
+        }
 
-    def __get_config(self, config):
-        """
-        Get config and do necessary checking
-        :param config:
-        :return:
-        """
-        #lr = config.get("lr", 0.001),
-        #lstm_1_units = config.get("lstm_1", 20),
-        #dropout_1 = config.get("dropout_1", 0.2),
-        #lstm_2_units = config.get("lstm_2", 10),
-        #dropout_2 = config.get("dropout_2", 0.2)
-        return config
+    def _get_optional_parameters(self):
+        return {
+            'lstm_1_units',
+            'dropout_1',
+            'lstm_2_units',
+            'dropout_2',
+            'metric',
+            'lr',
+            'epochs',
+            'batch_size'
+        }
+
+
+if __name__ == "__main__":
+    model = VanillaLSTM(check_optional_config=False)
+    x_train, y_train, x_test, y_test = load_nytaxi_data('../../../../data/nyc_taxi_rolled_split.npz')
+    config = {
+        'input_shape_x': x_train.shape[1],
+        'input_shape_y': x_train.shape[-1],
+        'out_units': 1,
+        'dummy1': 1,
+        'batch_size': 1024,
+        'epochs': 1
+    }
+    metric = model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config)
+    print(metric)
+    print(model.evaluate(x_test, y_test))
+

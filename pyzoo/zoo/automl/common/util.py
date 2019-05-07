@@ -14,3 +14,10 @@
 # limitations under the License.
 #
 
+
+import numpy as np
+
+
+def load_nytaxi_data(npz_path):
+    data = np.load(npz_path)
+    return data['x_train'], data['y_train'], data['x_test'], data['y_test']

@@ -14,31 +14,26 @@
 # limitations under the License.
 #
 
+from abc import ABC, abstractmethod
 
-class BaseModel(object):
+
+class BaseModel(ABC):
     """
     base model for automl tuning
     """
 
-    def __init__(self):
-        pass
+    check_optional_config = False
 
-    def build(self, **config):
+    @abstractmethod
+    def fit_eval(self, x, y, validation_data=None, **config):
         """
-        build a model from config
-        :param config: tunable arguments for the model
-        :return: self
-        """
-        pass
-
-    def fit_iter(self, x, y, validation_data=None, **config):
-        """
-        optimize for one iteration for tuning
+        optimize and evaluate for one iteration for tuning
         :param config: tunable parameters for optimization
-        :return: self
+        :return:
         """
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def evaluate(self, x, y, metric=None):
         """
         Evaluate the model
@@ -47,15 +42,16 @@ class BaseModel(object):
         :param metric:
         :return: a list of metric evaluation results
         """
-        pass
+        raise NotImplementedError
 
+    @abstractmethod
     def predict(self, x):
         """
         Prediction.
         :param x: input
         :return: result
         """
-        pass
+        raise NotImplementedError
 
     def save(self, file):
         """
@@ -73,3 +69,31 @@ class BaseModel(object):
         """
         pass
 
+    @abstractmethod
+    def _get_required_parameters(self):
+        """
+        :return: required parameters to be set into config
+        """
+        return set()
+
+    @abstractmethod
+    def _get_optional_parameters(self):
+        """
+        :return: optional parameters to be set into config
+        """
+        return set()
+
+    def _check_config(self, **config):
+        """
+        Get config and do necessary checking
+        :param config:
+        :return:
+        """
+        config_parameters = set(config.keys())
+        if not config_parameters.issuperset(self._get_required_parameters()):
+            raise ValueError("Missing required parameters in configuration. " +
+                             "Required parameters are: " + str(self._get_required_parameters()))
+        if self.check_optional_config and not config_parameters.issuperset(self._get_optional_parameters()):
+            raise ValueError("Missing optional parameters in configuration. " +
+                             "Optional parameters are: " + str(self._get_optional_parameters()))
+        return True
