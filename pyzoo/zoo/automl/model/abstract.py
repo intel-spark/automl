@@ -53,6 +53,7 @@ class BaseModel(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
     def save(self, file):
         """
         save model to file.
@@ -61,6 +62,7 @@ class BaseModel(ABC):
         """
         pass
 
+    @abstractmethod
     def restore(self, file):
         """
         restore model from file

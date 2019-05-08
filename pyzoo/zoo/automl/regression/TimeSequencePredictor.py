@@ -16,16 +16,14 @@
 
 
 import numpy as np
-from zoo.automl.search.SearchDriver import SearchDriver
-from zoo.automl.model import VanillaLSTM
+from zoo.automl.search.abstract import *
+from zoo.automl.search.RayTuneSearchEngine import RayTuneSearchEngine
+
 from zoo.automl.feature.time_sequence import TimeSequenceFeatures, DummyTimeSequenceFeatures
 from zoo.automl.model.time_sequence import TimeSequenceModel
+from zoo.automl.model import VanillaLSTM
+from zoo.automl.pipeline.time_sequence import TimeSequencePipeline
 from zoo.automl.common.util import *
-
-import os
-
-import ray
-from ray import tune
 
 
 class TimeSequencePredictor(object):
@@ -49,7 +47,6 @@ class TimeSequencePredictor(object):
         """
         self.logs_dir = logs_dir
         self.pipeline = None
-        self.tune = SearchDriver()
 
     def fit(self, input_df,
             dt_col="datetime",
@@ -117,29 +114,38 @@ class TimeSequencePredictor(object):
         return self.pipeline.evaluate(input_df, dt_col, target_col, extra_features_col)
 
     def _hp_search(self, input_df, dt_col, target_col, extra_features_col, validation_df, metric):
-        # we may have to retrain thie tune.sample_from
-        feature_list = ["WEEKDAY(datetime)", "HOUR(datetime)",
-                        "PERCENTILE(value)", "IS_WEEKEND(datetime)",
-                        "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"
-                        # "DAY(datetime)","MONTH(datetime)", #probabaly not useful
-                        ]
-        target_list = ["value"]
+        # features
+        # feature_list = ["WEEKDAY(datetime)", "HOUR(datetime)",
+        #                "PERCENTILE(value)", "IS_WEEKEND(datetime)",
+        #                "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"
+        #                # "DAY(datetime)","MONTH(datetime)", #probabaly not useful
+        #                ]
+        # target_list = ["value"]
+        # ft = TimeSequenceFeatures(dt_col, target_col, extra_features_col)
 
-        space = {
-            # "lr": tune.grid_search([0.001, 0.01]),
-            # "lr" : tune.sample_from(lambda spec: numpy.random.uniform(0.001,0.1)),
-            "selected_features": tune.sample_from(
-                lambda spec: np.random.choice(
-                    feature_list,
-                    size=np.random.randint(low=3, high=len(feature_list), size=1),
-                    replace=False)),
-            # "lstm_1_units":tune.grid_search([16,32,64]),
-            # "dropout_1": tune.sample_from(lambda spec: np.random.uniform(0.1,0.6)),
-            # "lstm_2_units": tune.grid_search([16,32,64]),
-            # "dropout_2": tune.sample_from(lambda spec: np.random.uniform(0.1,0.6)),
-            "batch_size": tune.grid_search([32, 1024]),
-            # "lstm_1_units":tune.sample_from(lambda spec: int(np.random.uniform(16, 256))),
-            # "lstm_2_units": tune.sample_from(lambda spec: int(np.random.uniform(16, 256))),
+        ft = DummyTimeSequenceFeatures(filepath='../../../../data/nyc_taxi_rolled_split.npz')
+
+        # model
+        model = VanillaLSTM(check_optional_config=False)
+
+        search_space = {
+            # -------- feature related parameters
+            # "selected_features": RandomSample(
+            #    lambda spec: np.random.choice(
+            #        feature_list,
+            #        size=np.random.randint(low=3, high=len(feature_list), size=1),
+            #        replace=False)),
+
+            # --------- model related parameters
+            # 'input_shape_x': x_train.shape[1],
+            # 'input_shape_y': x_train.shape[-1],
+            'out_units': 1,
+            "lr": 0.001,
+            "lstm_1_units": GridSearch([16, 32]),
+            "dropout_1": 0.2,
+            "lstm_2_units": 10,
+            "dropout_2": RandomSample(lambda spec: np.random.uniform(0.2, 0.5)),
+            "batch_size": 1024,
         }
 
         stop = {
@@ -147,27 +153,42 @@ class TimeSequencePredictor(object):
             "training_iteration": 20
         }
 
-        ##may have problems here
-        config = {'feature_list': feature_list,
-                  'target_list': target_list,
-                  'space': space,
-                  'stop': stop}
+        searcher = RayTuneSearchEngine(logs_dir=self.logs_dir, ray_num_cpus=6, resources_per_trial={"cpu": 2})
+        searcher.compile(input_df,
+                         search_space=search_space,
+                         stop=stop,
+                         # feature_transformers=TimeSequenceFeatures,
+                         feature_transformers=ft,  # use dummy features for testing the rest
+                         model=model,
+                         validation_df=validation_df,
+                         metric=metric)
+        # searcher.test_run()
 
-        searcher = SearchDriver()
-        trials = searcher.run(input_df,
-                              #feature_transformers=TimeSequenceFeatures,
-                              feature_transformers=DummyTimeSequenceFeatures, #use dummy features for testing the rest
-                              model=TimeSequenceModel,
-                              validation_df=validation_df,
-                              metric=metric,
-                              **config)
-        return searcher.get_pipeline(trials)
+        trials = searcher.run()
+        best = searcher.get_best_trails(trials, 1)  # get the best one trial, later could be n
+        pipeline = self._make_pipeline(best, ft, model)
+        return pipeline
+
+    def _make_pipeline(self, trial, feature_transformers, model):
+        isinstance(trial, TrialOutput)
+        # TODO we need to save fitted parameters (not in config, e.g. min max for scalers, model weights)
+        # for both transformers and model
+        feature_transformers.restore(trial.config)
+        model.restore(trial.model_path, trial.config)
+        return TimeSequencePipeline(feature_transformers=feature_transformers, model=model)
 
 
 if __name__ == "__main__":
     train_df, test_df = load_nytaxi_data_df("../../../../data/nyc_taxi.csv")
-    #print(train_df.describe())
-    #print(test_df.describe())
+    # print(train_df.describe())
+    # print(test_df.describe())
 
     tsp = TimeSequencePredictor()
-    tsp.fit_()
+    tsp.fit(train_df,
+            dt_col="datetime",
+            target_col="value",
+            extra_features_col=None,
+            validation_df=None,
+            metric="mean_squared_error")
+    result = tsp.evaluate(test_df, metric=["mean_squared_error"])
+    print(result)

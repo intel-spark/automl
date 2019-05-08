@@ -15,31 +15,25 @@
 #
 
 
-class Pipeline(object):
-    """
-    The pipeline object which is used to store the series of transformation of features and model
-    """
+from zoo.automl.pipeline.abstract import Pipeline
+
+
+class TimeSequencePipeline(Pipeline):
+
     def __init__(self, feature_transformers, model):
         """
         initialize a pipeline
         :param model: the internal model
         :param feature_transformers: the feature transformers
         """
-        self.model = model
         self.feature_transformers = feature_transformers
+        self.model = model
 
-    def save(self, file):
-        """
-        save the pipeline to a file
-        :param file: the pipeline file
-        :return: a pipeline object
-        """
-        pass
+    def evaluate(self, input_df, metric=None):
+        x, y = self.feature_transformers.transform(input_df)
+        return self.model.evaluate(x, y, metric)
 
-    def restore(self, file):
-        """
-        restore the pipeline from a file
-        :param file: the pipeline file
-        :return:
-        """
-        pass
+    def predict(self, input_df):
+        # there might be no y in the data, TODO needs to fix in TimeSquenceFeatures
+        x, _ = self.feature_transformers.transform(input_df)
+        return self.model.predict(x)

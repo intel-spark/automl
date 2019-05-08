@@ -43,8 +43,8 @@ class VanillaLSTM(BaseModel):
         self.metric = config.get('metric', 'mean_squared_error')
         self.model = Sequential()
         self.model.add(LSTM(
-            input_shape=(config.get('input_shape_x', 20),
-                         config.get('input_shape_y', 20)),
+            # input_shape=(config.get('input_shape_x', 20),
+            #             config.get('input_shape_y', 20)),
             units=config.get('lstm_1_units', 20),
             return_sequences=True))
         self.model.add(Dropout(config.get('dropout_1', 0.2)))
@@ -58,7 +58,7 @@ class VanillaLSTM(BaseModel):
         self.model.compile(loss='mse',
                            metrics=[self.metric],
                            optimizer=keras.optimizers.RMSprop(lr=config.get('lr', 0.001)))
-        return self
+        return self.model
 
     def fit_eval(self, x, y, validation_data=None, **config):
         """
@@ -80,11 +80,12 @@ class VanillaLSTM(BaseModel):
 
         hist = self.model.fit(x, y,
                               validation_data=validation_data,
-                              batch_size=config.get('batch_size', 32),
-                              epochs=config.get('epochs', 20),
+                              batch_size=config.get('batch_size', 1024),
+                              epochs=config.get('epochs', 1),
                               verbose=0
                               )
         # print(hist.history)
+
         if validation_data is None:
             # get train metrics
             # results = self.model.evaluate(x, y)
@@ -113,28 +114,29 @@ class VanillaLSTM(BaseModel):
         """
         return self.model.predict(x)
 
-    def save(self, filename="weights_tune_tmp.h5"):
+    def save(self, file_path="weights_tune_tmp.h5", **config):
         """
         save model to file.
         :param file: the model file.
         :return:
         """
         self.model.save_weights("weights_tune_tmp.h5")
-        os.rename("weights_tune_tmp.h5", filename)
+        os.rename("weights_tune_tmp.h5", file_path)
         pass
 
-    def restore(self, file):
+    def restore(self, file_path, **config):
         """
         restore model from file
         :param file: the model file
         :return: the restored model
         """
-        pass
+        self.model = self._build(config)
+        self.model.load_weights(file_path)
 
     def _get_required_parameters(self):
         return {
-            'input_shape_x',
-            'input_shape_y',
+            # 'input_shape_x',
+            # 'input_shape_y',
             'out_units'
         }
 
@@ -155,8 +157,8 @@ if __name__ == "__main__":
     model = VanillaLSTM(check_optional_config=False)
     x_train, y_train, x_test, y_test = load_nytaxi_data('../../../../data/nyc_taxi_rolled_split.npz')
     config = {
-        'input_shape_x': x_train.shape[1],
-        'input_shape_y': x_train.shape[-1],
+        # 'input_shape_x': x_train.shape[1],
+        # 'input_shape_y': x_train.shape[-1],
         'out_units': 1,
         'dummy1': 1,
         'batch_size': 1024,
@@ -165,4 +167,3 @@ if __name__ == "__main__":
     metric = model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config)
     print(metric)
     print(model.evaluate(x_test, y_test))
-
