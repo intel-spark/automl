@@ -24,12 +24,12 @@ class BaseFeatures(ABC):
     check_optional_config = False
 
     @abstractmethod
-    def fit_transform(self, input_df, **config):
+    def fit(self, input_df, **config):
         """
-        fit and transform the input dataframe.
+        fit data with the input dataframe
         Will refit the scalars to this data if any.
-        :param input_df:
-        :param config:
+        :param input_df: input to be fitted
+        :param config: the config
         :return:
         """
         pass
@@ -37,8 +37,8 @@ class BaseFeatures(ABC):
     @abstractmethod
     def transform(self, input_df):
         """
-        transform the data without refitting the scalars (e.g. minmax scalar)
-        :param input_df:
+        transform the data with fitted
+        :param input_df: input dataframe
         :return:
         """
         pass

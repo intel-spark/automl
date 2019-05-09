@@ -40,19 +40,32 @@ class TimeSequencePredictor(object):
 
     """
 
-    def __init__(self, logs_dir="~/zoo_automl_logs", drop_missing=True):
+    def __init__(self,
+                 logs_dir="~/zoo_automl_logs",
+                 future_seq_len=1,
+                 dt_col="datetime",
+                 target_col="value",
+                 extra_features_col=None,
+                 drop_missing=True):
         """
         Constructor of Time Sequence Predictor
         :param logs_dir where the automl tune logs file located
+        :param future_seq_len: the future sequence length to be predicted
+        :param dt_col: the datetime index column
+        :param target_col: the target col (to be predicted)
+        :param extra_features_col: extra features
+        :param drop_missing: whether to drop missing values in the input
         """
         self.logs_dir = logs_dir
         self.pipeline = None
+        self.future_seq_len = future_seq_len
+        self.dt_col = dt_col
+        self.target_col = target_col
+        self.extra_features_col = extra_features_col
+        self.drop_missing = drop_missing
 
-    def fit(self, input_df,
-            future_seq_len=1,
-            dt_col="datetime",
-            target_col="value",
-            extra_features_col=None,
+    def fit(self,
+            input_df,
             validation_df=None,
             metric="mean_squared_error"):
         """
@@ -62,29 +75,18 @@ class TimeSequencePredictor(object):
          datetime   value   "extra feature 1"   "extra feature 2"
          2019-01-01 1.9 1   2
          2019-01-02 2.3 0   2
-        :param future_seq_len: the future sequence length to be predicted
-        :param dt_col: the datetime index column
-        :param target_col: the target col (to be predicted)
-        :param extra_features_col: extra features
         :param validation_df: validation data
         :param metric: String. Metric used for train and validation. Available values are "mean_squared_error" or
         "r_square"
         :return: self
         """
         self.pipeline = self._hp_search(input_df,
-                                        future_seq_len=future_seq_len,
-                                        dt_col=dt_col,
-                                        target_col=target_col,
-                                        extra_features_col=extra_features_col,
                                         validation_df=validation_df,
                                         metric=metric)
         return self
 
-    def evaluate(self, input_df,
-                 future_seq_len=1,
-                 dt_col="datetime",
-                 target_col="value",
-                 extra_features_col=None,
+    def evaluate(self,
+                 input_df,
                  metric=None
                  ):
         """
@@ -93,39 +95,31 @@ class TimeSequencePredictor(object):
          datetime   value   "extra feature 1"   "extra feature 2"
          2019-01-01 1.9 1   2
          2019-01-02 2.3 0   2
-        :param future_seq_len: the future sequence length to be predicted
-        :param dt_col: the datetime index column
-        :param target_col: the target col (to be predicted)
-        :param extra_features_col: extra features
         :param metric: A list of Strings Available string values are "mean_squared_error", "r_square".
         :return: a list of metric evaluation results.
         """
-        return self.pipeline.evaluate(input_df, future_seq_len, dt_col, target_col, extra_features_col, metric)
+        return self.pipeline.evaluate(input_df, metric)
 
-    def predict(self, input_df,
-                future_seq_len=1,
-                dt_col="datetime",
-                target_col="value",
-                extra_features_col=None):
+    def predict(self,
+                input_df):
         """
         Predict future sequence from past sequence.
         :param input_df: The input time series data frame, Example:
          datetime   value   "extra feature 1"   "extra feature 2"
          2019-01-01 1.9 1   2
          2019-01-02 2.3 0   2
-        :param future_seq_len: the future sequence length to be predicted
-        :param dt_col: the datetime index column
-        :param target_col: the target col (to be predicted)
-        :param extra_features_col: extra features
-        :return: a dataframe with 2 columns, the 1st is the datetime, which is the last datetime of the past sequence.
+        :return: a data frame with 2 columns, the 1st is the datetime, which is the last datetime of the past sequence.
             values are the predicted future sequence values.
             Example :
             datetime    values
             2019-01-03  np.array([2, 3, ... 9])
         """
-        return self.pipeline.predict(input_df, future_seq_len, dt_col, target_col, extra_features_col)
+        return self.pipeline.predict(input_df)
 
-    def _hp_search(self, input_df, future_seq_len, dt_col, target_col, extra_features_col, validation_df, metric):
+    def _hp_search(self,
+                   input_df,
+                   validation_df,
+                   metric):
         # features
         # feature_list = ["WEEKDAY(datetime)", "HOUR(datetime)",
         #                "PERCENTILE(value)", "IS_WEEKEND(datetime)",
@@ -133,7 +127,7 @@ class TimeSequencePredictor(object):
         #                # "DAY(datetime)","MONTH(datetime)", #probabaly not useful
         #                ]
         # target_list = ["value"]
-        # ft = TimeSequenceFeatures(future_seq_len, dt_col, target_col, extra_features_col)
+        # ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col)
 
         ft = DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz')
 
@@ -151,7 +145,7 @@ class TimeSequencePredictor(object):
             # --------- model related parameters
             # 'input_shape_x': x_train.shape[1],
             # 'input_shape_y': x_train.shape[-1],
-            'out_units': future_seq_len,
+            'out_units': self.future_seq_len,
             "lr": 0.001,
             "lstm_1_units": GridSearch([16, 32]),
             "dropout_1": 0.2,
@@ -180,7 +174,8 @@ class TimeSequencePredictor(object):
         best = searcher.get_best_trials(k=1)[0]  # get the best one trial, later could be n
 
         pipeline = self._make_pipeline(best,
-                                       feature_transformers=DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz'),
+                                       feature_transformers=DummyTimeSequenceFeatures(
+                                           file_path='../../../../data/nyc_taxi_rolled_split.npz'),
                                        model=VanillaLSTM(check_optional_config=False))
         return pipeline
 
@@ -198,14 +193,13 @@ if __name__ == "__main__":
     # print(train_df.describe())
     # print(test_df.describe())
 
-    tsp = TimeSequencePredictor()
-    tsp.fit(train_df,
-            dt_col="datetime",
-            target_col="value",
-            extra_features_col=None,
-            validation_df=None,
-            metric="mean_squared_error")
+    tsp = TimeSequencePredictor(dt_col="datetime",
+                                target_col="value",
+                                extra_features_col=None, )
+    pipeline = tsp.fit(train_df,
+                       validation_df=None,
+                       metric="mean_squared_error")
 
-    print("evaluate:", tsp.evaluate(test_df, metric=["mean_squared_error", "r_square"]))
-    pred = tsp.predict(test_df)
+    print("evaluate:", pipeline.evaluate(test_df, metric=["mean_squared_error", "r_square"]))
+    pred = pipeline.predict(test_df)
     print("predict:", pred.shape)

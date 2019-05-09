@@ -41,6 +41,7 @@ class Pipeline(ABC):
         """
         pass
 
+    @abstractmethod
     def save(self, file):
         """
         save the pipeline to a file
@@ -49,6 +50,7 @@ class Pipeline(ABC):
         """
         pass
 
+    @abstractmethod
     def restore(self, file):
         """
         restore the pipeline from a file
