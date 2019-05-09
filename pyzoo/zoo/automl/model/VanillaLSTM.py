@@ -114,24 +114,28 @@ class VanillaLSTM(BaseModel):
         """
         return self.model.predict(x)
 
-    def save(self, file_path="weights_tune_tmp.h5", **config):
+    def save(self, file_path, **config):
         """
         save model to file.
-        :param file: the model file.
+        :param file_path: the model file.
+        :param config: the trial config
         :return:
         """
-        self.model.save_weights("weights_tune_tmp.h5")
-        os.rename("weights_tune_tmp.h5", file_path)
+        self.model.save("vanilla_lstm_tmp.h5")
+        os.rename("vanilla_lstm_tmp.h5", file_path)
         pass
 
     def restore(self, file_path, **config):
         """
         restore model from file
-        :param file: the model file
+        :param file_path: the model file
+        :param config: the trial config
         :return: the restored model
         """
-        self.model = self._build(config)
-        self.model.load_weights(file_path)
+        #self.model = None
+        #self._build(**config)
+        self.model = keras.models.load_model(file_path)
+        #self.model.load_weights(file_path)
 
     def _get_required_parameters(self):
         return {
@@ -153,6 +157,7 @@ class VanillaLSTM(BaseModel):
         }
 
 
+
 if __name__ == "__main__":
     model = VanillaLSTM(check_optional_config=False)
     x_train, y_train, x_test, y_test = load_nytaxi_data('../../../../data/nyc_taxi_rolled_split.npz')
@@ -164,6 +169,12 @@ if __name__ == "__main__":
         'batch_size': 1024,
         'epochs': 1
     }
-    metric = model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config)
-    print(metric)
-    print(model.evaluate(x_test, y_test))
+
+    print("fit_eval:",model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config))
+    print("evaluate:",model.evaluate(x_test, y_test))
+    print("saving model")
+    model.save("testmodel.tmp.h5",**config)
+    print("restoring model")
+    model.restore("testmodel.tmp.h5",**config)
+    print("evaluate after retoring:",model.evaluate(x_test, y_test))
+    os.remove("testmodel.tmp.h5")

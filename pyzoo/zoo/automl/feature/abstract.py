@@ -43,19 +43,24 @@ class BaseFeatures(ABC):
         """
         pass
 
-    def save(self, file):
+    @abstractmethod
+    def save(self, file_path, **config):
         """
         save the feature tools internal variables.
         Some of the variables are derived after fit_transform, so only saving config is not enough.
-        :param: file : the file to be saved
+        :param: file_path : the file to be saved
+        :param: config: the trial config
         :return:
         """
         pass
 
-    def restore(self, file):
+    @abstractmethod
+    def restore(self, file_path, **config):
         """
         Restore variables from file
-        :param file: the dumped variables file
+        :param file_path: file contain saved parameters. i.e. some parameters are obtained during training,
+            not in trial config, e.g. scaler fit params)
+        :param config: the trial config
         :return:
         """
         pass

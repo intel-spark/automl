@@ -36,7 +36,7 @@ class SearchEngine(ABC):
         pass
 
     @abstractmethod
-    def get_best_trails(self, k):
+    def get_best_trials(self, k):
         """
         Get the best trials from .
         :param k: trials to be selected

@@ -54,22 +54,24 @@ class BaseModel(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save(self, file):
+    def save(self, file_path, **config):
         """
         save model to file.
-        :param file: the model file.
-        :return:
+        :param file_path: the model file path to be saved to.
+        :return: config: the configurations
         """
         pass
 
     @abstractmethod
-    def restore(self, file):
+    def restore(self, file_path, **config):
         """
-        restore model from file
-        :param file: the model file
+        restore model from model file and config.
+        :param file_path: the model file
+        :param config: the config
         :return: the restored model
         """
         pass
+
 
     @abstractmethod
     def _get_required_parameters(self):

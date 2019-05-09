@@ -18,8 +18,8 @@ import os
 import numpy as np
 import ray
 from ray import tune
+from copy import copy, deepcopy
 
-from zoo.automl.common.tunehelper import *
 from zoo.automl.search.abstract import *
 
 
@@ -37,7 +37,7 @@ class RayTuneSearchEngine(SearchEngine):
         self.pipeline = None
         self.train_func = None
         self.resources_per_trail = resources_per_trial
-
+        self.trials = None
         ray.init(num_cpus=ray_num_cpus, include_webui=False, ignore_reinit_error=True)
 
     def compile(self,
@@ -84,17 +84,34 @@ class RayTuneSearchEngine(SearchEngine):
             verbose=1,
             reuse_actors=True
         )
+        self.trials = trials
+        return self
 
-        return trials
-
-    def get_best_trials(self, trials, k=1):
-        sorted_trials = get_sorted_trials(trials, metric="reward_metric")
+    def get_best_trials(self, k=1):
+        sorted_trials = RayTuneSearchEngine._get_sorted_trials(self.trials, metric="reward_metric")
         best_trials = sorted_trials[:k]
-        return [self._make_trial_output() for t in best_trials]
+        return [self._make_trial_output(t) for t in best_trials]
 
     def _make_trial_output(self, trial):
         return TrialOutput(config=trial.config,
                            model_path=os.path.join(trial.logdir, trial.last_result["checkpoint"]))
+
+    @staticmethod
+    def _get_best_trial(trial_list, metric):
+        """Retrieve the best trial."""
+        return max(trial_list, key=lambda trial: trial.last_result.get(metric, 0))
+
+    @staticmethod
+    def _get_sorted_trials(trial_list, metric):
+        return sorted(
+            trial_list,
+            key=lambda trial: trial.last_result.get(metric, 0),
+            reverse=True)
+
+    @staticmethod
+    def _get_best_result(trial_list, metric):
+        """Retrieve the last result from the best trial."""
+        return {metric: RayTuneSearchEngine._get_best_trial(trial_list, metric).last_result[metric]}
 
     def test_run(self):
         def mock_reporter(**kwargs):
@@ -112,8 +129,8 @@ class RayTuneSearchEngine(SearchEngine):
             return 1
         raise Exception("Didn't call reporter...")
 
-    def _prepare_train_func(self,
-                            input_df,
+    @staticmethod
+    def _prepare_train_func(input_df,
                             feature_transformers,
                             model,
                             validation_df=None,
@@ -128,23 +145,39 @@ class RayTuneSearchEngine(SearchEngine):
         :param metric: the rewarding metric
         :return: the train function
         """
+        input_df_id = ray.put(input_df)
+        ft_id = ray.put(feature_transformers)
+        model_id = ray.put(model)
+
+        if validation_df is not None:
+            validation_df_id = ray.put(validation_df)
 
         def train_func(config, tune_reporter):
-            # prepare data
-            (x_train, y_train) = feature_transformers.fit_transform(input_df, **config)
+            # make a copy from global variables for trial to make changes
+            global_ft = ray.get(ft_id)
+            global_model = ray.get(model_id)
+            trial_ft = deepcopy(global_ft)
+            trial_model = deepcopy(global_model)
+
+            # handling input
+            global_input_df = ray.get(input_df_id)
+            trial_input_df = deepcopy(global_input_df)
+            (x_train, y_train) = trial_ft.fit_transform(trial_input_df, **config)
+
+            # handling validation data
             validation_data = None
             if validation_df is not None:
-                validation_data = feature_transformers.transform(validation_df)
+                global_validation_df = ray.get(validation_df_id)
+                trial_validation_df = deepcopy(global_validation_df)
+                validation_data = trial_ft.transform(trial_validation_df)
 
-            # build model
-            # model.build(**config)
-            # print(model.metrics_names)
+            # no need to call build since it is called the first time fit_eval is called.
             # callbacks = [TuneCallback(tune_reporter)]
             # fit model
             best_reward_m = -999
             reward_m = -999
             for i in range(1, 101):
-                result = model.fit_eval(x_train, y_train, validation_data=validation_data, **config)
+                result = trial_model.fit_eval(x_train, y_train, validation_data=validation_data, **config)
                 if metric == "mean_squared_error":
                     reward_m = (-1) * result
                     # print("running iteration: ",i)
@@ -154,7 +187,7 @@ class RayTuneSearchEngine(SearchEngine):
                     raise ValueError("metric can only be \"mean_squared_error\" or \"r_square\"")
                 if reward_m > best_reward_m:
                     best_reward_m = reward_m
-                    model.save("weights_tune.h5", config)
+                    trial_model.save(file_path="weights_tune.h5", **config)
                 tune_reporter(
                     training_iteration=i,
                     reward_metric=reward_m,

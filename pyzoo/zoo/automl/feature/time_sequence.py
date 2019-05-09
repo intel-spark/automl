@@ -159,13 +159,13 @@ class DummyTimeSequenceFeatures(BaseFeatures):
     use flag train=True or False in config to return train or test
     """
 
-    def __init__(self, filepath):
+    def __init__(self, file_path):
         """
         the prepared data path saved by in numpy.savez
         file contains 4 arrays: "x_train", "y_train", "x_test", "y_test"
-        :param filepath: the filepath of the npz
+        :param file_path: the file_path of the npz
         """
-        x_train, y_train, x_test, y_test = load_nytaxi_data(filepath)
+        x_train, y_train, x_test, y_test = load_nytaxi_data(file_path)
         self.train_data = (x_train, y_train)
         self.test_data = (x_test, y_test)
         self.config = {"train": True}
@@ -194,3 +194,22 @@ class DummyTimeSequenceFeatures(BaseFeatures):
 
     def _get_required_parameters(self):
         return set()
+
+    def save(self, file_path, **config):
+        """
+        save nothing
+        :param file_path:
+        :param config:
+        :return:
+        """
+        pass
+
+    def restore(self, file_path, **config):
+        """
+        restore nothing
+        :param file_path:
+        :param config:
+        :return:
+        """
+        pass
+

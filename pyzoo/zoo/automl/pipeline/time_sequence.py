@@ -29,11 +29,20 @@ class TimeSequencePipeline(Pipeline):
         self.feature_transformers = feature_transformers
         self.model = model
 
-    def evaluate(self, input_df, metric=None):
+    def evaluate(self, input_df,
+                 future_seq_len=1,
+                 dt_col="datetime",
+                 target_col="value",
+                 extra_features_col=None,
+                 metric=["mean_squared_error"]):
         x, y = self.feature_transformers.transform(input_df)
         return self.model.evaluate(x, y, metric)
 
-    def predict(self, input_df):
+    def predict(self, input_df,
+                future_seq_len=1,
+                dt_col="datetime",
+                target_col="value",
+                extra_features_col=None):
         # there might be no y in the data, TODO needs to fix in TimeSquenceFeatures
         x, _ = self.feature_transformers.transform(input_df)
         return self.model.predict(x)
