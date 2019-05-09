@@ -19,6 +19,10 @@ from zoo.automl.feature.abstract import BaseFeatures
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import pandas as pd
 import numpy as np
+import featuretools as ft
+from featuretools.primitives import make_agg_primitive, make_trans_primitive
+from featuretools.variable_types import Text, Numeric, DatetimeTimeIndex
+import json
 
 
 class TimeSequenceFeatures(BaseFeatures):
@@ -26,14 +30,18 @@ class TimeSequenceFeatures(BaseFeatures):
     TimeSequence feature engineering
     """
 
-    def __init__(self, drop_missing=True):
+    def __init__(self, dt_col="datetime", target_col="value", drop_missing=True):
         """
         Constructor.
         :param drop_missing: whether to drop missing values in the curve, if this is set to False, an error will be
         reported if missing values are found. If True, will drop the missing values and won't raise errors.
         """
         self.scalar = MinMaxScaler()
+        # self.scalar = StandardScaler()
         self.config = None
+        self.dt_col = dt_col
+        self.target_col = target_col
+        self.feature_data = None
 
     def fit(self, input_df, **config):
         """
@@ -52,7 +60,10 @@ class TimeSequenceFeatures(BaseFeatures):
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
         self.config = self._get_feat_config(**config)
-        # TODO add any fitting operations here
+        self._check_input(input_df)
+        self.feature_data = self._get_features(input_df, **self.config)
+        self.scalar.fit(self.feature_data)
+
 
     def transform(self, input_df):
         """
@@ -70,8 +81,29 @@ class TimeSequenceFeatures(BaseFeatures):
         """
         if self.config is None:
             raise Exception("Needs to call fit_transform first before calling transform")
-        (x, y) = self._run(input_df, **self.config)
+        # select and standardize data
+        data_n = self._scale(self.feature_data)
+        # roll data and prepare into array x and y
+        (x, y) = self._roll(data_n)
+
         return x, y
+
+    data = [[0, 0], [0, 0], [1, 1], [1, 1]]
+    scaler = StandardScaler()
+    # scaler.mean_ = 1.0
+    # scaler.scale_ = 5.0
+    # # scaler.fit(data)
+    # print(scaler.transform(data))
+
+    # with open('data.json', 'w') as outfile:
+    #     json.dump({"mean": scaler.mean_, "scale": scaler.scale_, "seq": [1, 2, 3, 4], "dic": {"a": 1}}, outfile)
+
+    with open('data.json', 'r') as inputfile:
+        result = json.load(inputfile)
+
+    scaler.mean_ = result["mean"]
+    scaler.scale_ = result["scale"]
+    print(scaler.transform(data))
 
     def save(self, file):
         """
@@ -80,7 +112,11 @@ class TimeSequenceFeatures(BaseFeatures):
         :param: file : the file to be saved
         :return:
         """
-        pass
+        with open(file, 'w') as output_file:
+            # for StandardScalar()
+            json.dump({"mean": self.scaler.mean_, "scale": self.scaler.scale_}, save_file)
+            # for minmaxScalar()
+            # json.dump({"min": self.scaler.min_, "scale": self.scalar.scale_}, save_file)
 
     def restore(self, file):
         """
@@ -88,7 +124,20 @@ class TimeSequenceFeatures(BaseFeatures):
         :param file: the dumped variables file
         :return:
         """
-        pass
+        with open(file, 'r') as input_file:
+            result = json.load(input_file)
+
+        # for StandardScalar()
+        self.scaler = StandardScaler()
+        self.scaler.mean_ = result["mean"]
+        self.scaler.scale_ = result["scale"]
+        # print(self.scaler.transform(input_data))
+
+        # for MinMaxScalar()
+        # self.scaler = MinMaxScaler()
+        # self.scaler.min_ = result["min"]
+        # self.scaler.scale_ = result["scale"]
+        # print(self.scaler.transform(input_data))
 
     def _get_feat_config(self, config):
         """
@@ -105,7 +154,25 @@ class TimeSequenceFeatures(BaseFeatures):
         :param input_df:
         :return:
         """
+        # check missing values
+        is_nan = pd.isna(input_df)
+        if is_nan.any(axis=None):
+            raise ValueError("Missing value in input dataframe!")
+
+        datetime = input_df[self.dt_col]
+
+        interval = datetime[1] - datetime[0]
+
+        if not all([datetime[i] - datetime[i-1] == interval for i in range(1, len(datetime))]):
+            raise ValueError("Input time sequence intervals are not uniform!")
+
         return input_df
+
+    def _roll_data(self, data, seq_len):
+        result = []
+        for i in range(len(data) - seq_len):
+            result.append(data[i : i + seq_len])
+        return np.asarray(result)
 
     def _roll(self, dataframe, past_seqlen, future_seqlen):
         """
@@ -114,8 +181,21 @@ class TimeSequenceFeatures(BaseFeatures):
         :param past_seqlen: the length of the past sequence
         :param future_seqlen: the length of the future sequence
         :return: tuple (x,y)
+            x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
+            dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
+            the 2nd col is the target value (data type should be numeric)
+            y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
+            length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        return None, None
+        x = dataframe[0:-future_seqlen].values
+        y = dataframe[past_seqlen-future_seqlen:][0].values
+        output_x = self._roll_data(x)
+        print(output_x).shape
+        output_y = self._roll_data(y)
+        print(output_y).shape
+        assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
+
+        return output_x, output_y
 
     def _scale(self, data):
         """
@@ -123,30 +203,66 @@ class TimeSequenceFeatures(BaseFeatures):
         :param data:
         :return:
         """
-
-        np_scaled = self.scalar.fit_transform(data)
+        np_scaled = self.scalar.transform(data)
         data_s = pd.DataFrame(np_scaled)
         return data_s
 
-    def _run(self, input_df, **config):
-        # check input dataframe for missing values
-        # generate features
-        # TODO generate features for input_df using featuretools or other.
-        # selected features
-        feature_cols = config.get("selected_features",
-                                  np.array(
-                                      ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)", "HOUR(datetime)",
-                                       "PERCENTILE(value)", "IS_WEEKEND(datetime)",
-                                       "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"]))
-        target_cols = np.array(["value"])
-        cols = np.concatenate([target_cols, feature_cols])
+    def _rearrange_data(self, input_df):
+        """
+        change the input_df column order into [datetime, target, feature1, feature2, ...]
+        :param input_df:
+        :return:
+        """
+        cols = input_df.columns.tolist()
+        new_cols = [self.dt_col, self.target_col] + [col for col in cols if col != self.dt_col and col != self.target_col]
+        rearranged_data = input_df[new_cols].copy
+        return rearranged_data
 
-        data_n = input_df[cols]
-        # select and standardize data
-        data_n = self._scale(data_n)
-        # roll data and prepare into array x and y
-        (x, y) = self._roll(data_n)
-        return x, y
+    def _generate_features(self, input_df):
+        df = input_df.copy()
+        df["id"] = df.index + 1
+
+        es = ft.EntitySet(id="data")
+        es = es.entity_from_dataframe(entity_id="time_seq",
+                                      dataframe=df,
+                                      index="id",
+                                      time_index=self.dt_col)
+
+        def is_awake(column):
+            hour = column.dt.hour
+            return (((hour >= 6) & (hour <= 23)) | (hour == 0)).astype(int)
+
+        def is_busy_hours(column):
+            hour = column.dt.hour
+            return (((hour >= 7) & (hour <= 9)) | (hour >= 16) & (hour <= 19)).astype(int)
+
+        IsAwake = make_trans_primitive(function=is_awake,
+                                       input_types=[DatetimeTimeIndex],
+                                       return_type=Numeric)
+        IsBusyHours = make_trans_primitive(function=is_busy_hours,
+                                           input_types=[DatetimeTimeIndex],
+                                           return_type=Numeric)
+
+        feature_matrix, feature_defs = ft.dfs(entityset=es,
+                                              target_entity="counts",
+                                              agg_primitives=["count"],
+                                              trans_primitives=["month", "weekday", "day", "hour", "percentile",
+                                                                "is_weekend", IsAwake, IsBusyHours])
+        return feature_matrix, feature_defs
+
+    def get_feature_names(self, feature_defs):
+        # todo: get feature names from feature_defs
+        return ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)", "HOUR(datetime)",
+                                       "PERCENTILE(value)", "IS_WEEKEND(datetime)",
+                                       "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"]
+
+    def _get_features(self, input_df, **config):
+        feature_matrix, feature_defs = self._generate_features(input_df)
+        feature_names = self.get_feature_names(feature_defs)
+        feature_cols = config.get("selected_features", np.array[feature_names])
+        target_cols = np.array([self.target_col])
+        cols = np.concatenate([target_cols, feature_cols])
+        return feature_matrix[cols]
 
 
 from zoo.automl.common.util import load_nytaxi_data
