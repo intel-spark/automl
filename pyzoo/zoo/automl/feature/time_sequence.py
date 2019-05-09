@@ -35,7 +35,7 @@ class TimeSequenceFeatures(BaseFeatures):
         self.scalar = MinMaxScaler()
         self.config = None
 
-    def fit_transform(self, input_df, **config):
+    def fit(self, input_df, **config):
         """
         Fit data and transform the raw data to features. This is used in training for hyper parameter searching.
         This method will refresh the parameters (e.g. min and max of the MinMaxScaler) if any
@@ -52,8 +52,7 @@ class TimeSequenceFeatures(BaseFeatures):
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
         self.config = self._get_feat_config(**config)
-        (x, y) = self._run(**self.config)
-        return x, y
+        # TODO add any fitting operations here
 
     def transform(self, input_df):
         """
@@ -168,7 +167,7 @@ class DummyTimeSequenceFeatures(BaseFeatures):
         x_train, y_train, x_test, y_test = load_nytaxi_data(file_path)
         self.train_data = (x_train, y_train)
         self.test_data = (x_test, y_test)
-        self.config = {"train": True}
+        self.is_train = False
 
     def _get_data(self, train=True):
         if train:
@@ -176,18 +175,20 @@ class DummyTimeSequenceFeatures(BaseFeatures):
         else:
             return self.test_data
 
-    def fit_transform(self, input_df, **config):
+    def fit(self, input_df, **config):
         """
 
         :param input_df:
         :param config:
         :return:
         """
-        self.config = config
-        return self._get_data(train=True)
+        self.is_train = True
 
     def transform(self, input_df):
-        return self._get_data(train=False)
+        x, y = self._get_data(self.is_train)
+        if self.is_train is True:
+            self.is_train = False
+        return x, y
 
     def _get_optional_parameters(self):
         return set()
@@ -212,4 +213,3 @@ class DummyTimeSequenceFeatures(BaseFeatures):
         :return:
         """
         pass
-

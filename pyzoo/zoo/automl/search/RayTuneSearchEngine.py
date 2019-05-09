@@ -162,7 +162,9 @@ class RayTuneSearchEngine(SearchEngine):
             # handling input
             global_input_df = ray.get(input_df_id)
             trial_input_df = deepcopy(global_input_df)
-            (x_train, y_train) = trial_ft.fit_transform(trial_input_df, **config)
+            trial_ft.fit(trial_input_df, **config)
+
+            (x_train, y_train) = trial_ft.transform(trial_input_df)
 
             # handling validation data
             validation_data = None
