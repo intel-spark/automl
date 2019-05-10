@@ -21,10 +21,11 @@ import pandas as pd
 
 def load_nytaxi_data_df(csv_path, test_split_ratio=0.1):
     full_df = pd.read_csv(csv_path)
+    full_df['datetime'] = pd.to_datetime(full_df['timestamp'])
     test_size = int(len(full_df) * test_split_ratio)
     train_df = full_df.iloc[:-test_size, :]
     test_df = full_df.iloc[-test_size:, :]
-    return train_df, test_df
+    return train_df[["datetime", "value"]].copy(), test_df[["datetime", "value"]].copy()
 
 
 def load_nytaxi_data(npz_path):

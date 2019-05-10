@@ -24,7 +24,7 @@ class BaseFeatures(ABC):
     check_optional_config = False
 
     @abstractmethod
-    def fit(self, input_df, **config):
+    def fit_transform(self, input_df, **config):
         """
         fit data with the input dataframe
         Will refit the scalars to this data if any.

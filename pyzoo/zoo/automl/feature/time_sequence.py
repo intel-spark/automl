@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from featuretools import TransformFeature
 
 from zoo.automl.feature.abstract import BaseFeatures
 
@@ -36,14 +37,16 @@ class TimeSequenceFeatures(BaseFeatures):
         :param drop_missing: whether to drop missing values in the curve, if this is set to False, an error will be
         reported if missing values are found. If True, will drop the missing values and won't raise errors.
         """
-        self.scalar = MinMaxScaler()
-        # self.scalar = StandardScaler()
+        # self.scaler = MinMaxScaler()
+        self.scaler = StandardScaler()
         self.config = None
         self.dt_col = dt_col
         self.target_col = target_col
         self.feature_data = None
+        self.drop_missing = drop_missing
+        self.generate_feature_list = None
 
-    def fit(self, input_df, **config):
+    def fit_transform(self, input_df, **config):
         """
         Fit data and transform the raw data to features. This is used in training for hyper parameter searching.
         This method will refresh the parameters (e.g. min and max of the MinMaxScaler) if any
@@ -61,8 +64,13 @@ class TimeSequenceFeatures(BaseFeatures):
         """
         self.config = self._get_feat_config(**config)
         self._check_input(input_df)
-        self.feature_data = self._get_features(input_df, **self.config)
-        self.scalar.fit(self.feature_data)
+        # print(input_df.shape)
+        feature_data = self._get_features(input_df, self.config)
+        self.scaler.fit(feature_data)
+        # self.save("StandardScaler.npz")
+        data_n = self._scale(feature_data)
+        (x, y) = self._roll(data_n, past_seqlen=50, future_seqlen=1)
+        return x, y
 
 
     def transform(self, input_df):
@@ -81,29 +89,12 @@ class TimeSequenceFeatures(BaseFeatures):
         """
         if self.config is None:
             raise Exception("Needs to call fit_transform first before calling transform")
+        # generate features
+        feature_data = self._get_features(input_df, self.config)
         # select and standardize data
-        data_n = self._scale(self.feature_data)
-        # roll data and prepare into array x and y
-        (x, y) = self._roll(data_n)
-
+        data_n = self._scale(feature_data)
+        (x, y) = self._roll(data_n, past_seqlen=50, future_seqlen=1)
         return x, y
-
-    data = [[0, 0], [0, 0], [1, 1], [1, 1]]
-    scaler = StandardScaler()
-    # scaler.mean_ = 1.0
-    # scaler.scale_ = 5.0
-    # # scaler.fit(data)
-    # print(scaler.transform(data))
-
-    # with open('data.json', 'w') as outfile:
-    #     json.dump({"mean": scaler.mean_, "scale": scaler.scale_, "seq": [1, 2, 3, 4], "dic": {"a": 1}}, outfile)
-
-    with open('data.json', 'r') as inputfile:
-        result = json.load(inputfile)
-
-    scaler.mean_ = result["mean"]
-    scaler.scale_ = result["scale"]
-    print(scaler.transform(data))
 
     def save(self, file):
         """
@@ -112,11 +103,14 @@ class TimeSequenceFeatures(BaseFeatures):
         :param: file : the file to be saved
         :return:
         """
-        with open(file, 'w') as output_file:
-            # for StandardScalar()
-            json.dump({"mean": self.scaler.mean_, "scale": self.scaler.scale_}, save_file)
-            # for minmaxScalar()
-            # json.dump({"min": self.scaler.min_, "scale": self.scalar.scale_}, save_file)
+        # for StandardScaler()
+        np.savez(file, mean=self.scaler.mean_, scale=self.scaler.scale_)
+        print("The mean and scale value of StandardScalar are saved in " + file)
+        # with open(file, 'w') as output_file:
+            # for StandardScaler()
+            # json.dump({"mean": self.scaler.mean_, "scale": self.scaler.scale_}, output_file)
+            # for minmaxScaler()
+            # json.dump({"min": self.scaler.min_, "scale": self.scaler.scale_}, output_file)
 
     def restore(self, file):
         """
@@ -124,8 +118,9 @@ class TimeSequenceFeatures(BaseFeatures):
         :param file: the dumped variables file
         :return:
         """
-        with open(file, 'r') as input_file:
-            result = json.load(input_file)
+        result = np.load(file)
+        # with open(file, 'r') as input_file:
+        #     result = json.load(input_file)
 
         # for StandardScalar()
         self.scaler = StandardScaler()
@@ -139,13 +134,18 @@ class TimeSequenceFeatures(BaseFeatures):
         # self.scaler.scale_ = result["scale"]
         # print(self.scaler.transform(input_data))
 
-    def _get_feat_config(self, config):
+    def _get_feat_config(self, **config):
         """
         Get feature related arguments from global hyper parameter config and do necessary error checking
-        :param config: the global config (usually from hyper paramter tuning)
+        :param config: the global config (usually from hyper parameter tuning)
         :return: config only for feature engineering
         """
-        feat_config = {"dummy_arg1": 1, "dummy_arg2": 2}
+        feature_config_names = ["selected_features"]
+        feat_config = {}
+        for name in feature_config_names:
+            if name not in config:
+                raise KeyError("Can not find " + name + " in config!")
+            feat_config[name] = config[name]
         return feat_config
 
     def _check_input(self, input_df):
@@ -155,12 +155,14 @@ class TimeSequenceFeatures(BaseFeatures):
         :return:
         """
         # check missing values
-        is_nan = pd.isna(input_df)
-        if is_nan.any(axis=None):
-            raise ValueError("Missing value in input dataframe!")
+        if self.drop_missing:
+            input_df = input_df.dropna()
+        else:
+            is_nan = pd.isna(input_df)
+            if is_nan.any(axis=None):
+                raise ValueError("Missing value in input dataframe!")
 
         datetime = input_df[self.dt_col]
-
         interval = datetime[1] - datetime[0]
 
         if not all([datetime[i] - datetime[i-1] == interval for i in range(1, len(datetime))]):
@@ -188,12 +190,10 @@ class TimeSequenceFeatures(BaseFeatures):
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
         x = dataframe[0:-future_seqlen].values
-        y = dataframe[past_seqlen-future_seqlen:][0].values
-        output_x = self._roll_data(x)
-        print(output_x).shape
-        output_y = self._roll_data(y)
-        print(output_y).shape
-        assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
+        y = dataframe[past_seqlen:][0].values
+        output_x = self._roll_data(x, past_seqlen)
+        output_y = self._roll_data(y, future_seqlen)
+        # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
 
         return output_x, output_y
 
@@ -203,7 +203,7 @@ class TimeSequenceFeatures(BaseFeatures):
         :param data:
         :return:
         """
-        np_scaled = self.scalar.transform(data)
+        np_scaled = self.scaler.transform(data)
         data_s = pd.DataFrame(np_scaled)
         return data_s
 
@@ -244,88 +244,112 @@ class TimeSequenceFeatures(BaseFeatures):
                                            return_type=Numeric)
 
         feature_matrix, feature_defs = ft.dfs(entityset=es,
-                                              target_entity="counts",
+                                              target_entity="time_seq",
                                               agg_primitives=["count"],
                                               trans_primitives=["month", "weekday", "day", "hour", "percentile",
                                                                 "is_weekend", IsAwake, IsBusyHours])
         return feature_matrix, feature_defs
 
-    def get_feature_names(self, feature_defs):
-        # todo: get feature names from feature_defs
-        return ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)", "HOUR(datetime)",
-                                       "PERCENTILE(value)", "IS_WEEKEND(datetime)",
-                                       "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"]
+    def write_generate_feature_list(self, feature_defs):
+        # to be confirmed
+        self.generate_feature_list = [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
 
-    def _get_features(self, input_df, **config):
+    def get_generate_features(self):
+        if self.generate_feature_list is None:
+            raise Exception("Needs to call fit_transform first before calling get_generate_features")
+        return self.generate_feature_list
+
+    def _get_features(self, input_df, config):
         feature_matrix, feature_defs = self._generate_features(input_df)
-        feature_names = self.get_feature_names(feature_defs)
-        feature_cols = config.get("selected_features", np.array[feature_names])
+        self.write_generate_feature_list(feature_defs)
+        feature_cols = np.asarray(config.get("selected_features"))
         target_cols = np.array([self.target_col])
         cols = np.concatenate([target_cols, feature_cols])
         return feature_matrix[cols]
 
-
-from zoo.automl.common.util import load_nytaxi_data
-
-
-class DummyTimeSequenceFeatures(BaseFeatures):
-    """
-    A Dummy Feature Transformer that just load prepared data
-    use flag train=True or False in config to return train or test
-    """
-
-    def __init__(self, file_path):
-        """
-        the prepared data path saved by in numpy.savez
-        file contains 4 arrays: "x_train", "y_train", "x_test", "y_test"
-        :param file_path: the file_path of the npz
-        """
-        x_train, y_train, x_test, y_test = load_nytaxi_data(file_path)
-        self.train_data = (x_train, y_train)
-        self.test_data = (x_test, y_test)
-        self.is_train = False
-
-    def _get_data(self, train=True):
-        if train:
-            return self.train_data
-        else:
-            return self.test_data
-
-    def fit(self, input_df, **config):
-        """
-
-        :param input_df:
-        :param config:
-        :return:
-        """
-        self.is_train = True
-
-    def transform(self, input_df):
-        x, y = self._get_data(self.is_train)
-        if self.is_train is True:
-            self.is_train = False
-        return x, y
-
     def _get_optional_parameters(self):
-        return set()
+        return set("selected_features")
 
     def _get_required_parameters(self):
-        return set()
+        return set("past_seqlen")
 
-    def save(self, file_path, **config):
-        """
-        save nothing
-        :param file_path:
-        :param config:
-        :return:
-        """
-        pass
 
-    def restore(self, file_path, **config):
-        """
-        restore nothing
-        :param file_path:
-        :param config:
-        :return:
-        """
-        pass
+if __name__ == "__main__":
+    from zoo.automl.common.util import load_nytaxi_data_df
+    csv_path = "/home/shan/sources/automl/data/nyc_taxi.csv"
+    train_df, test_df = load_nytaxi_data_df(csv_path)
+
+    feat = TimeSequenceFeatures(dt_col="datetime", target_col="value", drop_missing=True)
+    config = {"selected_features": ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)", "HOUR(datetime)",
+                                       "PERCENTILE(value)", "IS_WEEKEND(datetime)",
+                                       "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"],
+              "lr": 0.001}
+
+    train_X, train_Y = feat.fit_transform(train_df, **config)
+    # feat.restore("StandardScaler.npz")
+    test_X, test_Y = feat.transform(test_df)
+    feature_list = feat.get_generate_features()
+    print(feature_list)
+
+# class DummyTimeSequenceFeatures(BaseFeatures):
+#     """
+#     A Dummy Feature Transformer that just load prepared data
+#     use flag train=True or False in config to return train or test
+#     """
+#
+#     def __init__(self, file_path):
+#         """
+#         the prepared data path saved by in numpy.savez
+#         file contains 4 arrays: "x_train", "y_train", "x_test", "y_test"
+#         :param file_path: the file_path of the npz
+#         """
+#         from zoo.automl.common.util import load_nytaxi_data
+#         x_train, y_train, x_test, y_test = load_nytaxi_data(file_path)
+#         self.train_data = (x_train, y_train)
+#         self.test_data = (x_test, y_test)
+#         self.is_train = False
+#
+#     def _get_data(self, train=True):
+#         if train:
+#             return self.train_data
+#         else:
+#             return self.test_data
+#
+#     def fit(self, input_df, **config):
+#         """
+#
+#         :param input_df:
+#         :param config:
+#         :return:
+#         """
+#         self.is_train = True
+#
+#     def transform(self, input_df):
+#         x, y = self._get_data(self.is_train)
+#         if self.is_train is True:
+#             self.is_train = False
+#         return x, y
+#
+#     def _get_optional_parameters(self):
+#         return set()
+#
+#     def _get_required_parameters(self):
+#         return set()
+#
+#     def save(self, file_path, **config):
+#         """
+#         save nothing
+#         :param file_path:
+#         :param config:
+#         :return:
+#         """
+#         pass
+#
+#     def restore(self, file_path, **config):
+#         """
+#         restore nothing
+#         :param file_path:
+#         :param config:
+#         :return:
+#         """
+#         pass
