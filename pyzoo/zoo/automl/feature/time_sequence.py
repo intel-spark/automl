@@ -31,7 +31,7 @@ class TimeSequenceFeatures(BaseFeatures):
     TimeSequence feature engineering
     """
 
-    def __init__(self, dt_col="datetime", target_col="value", drop_missing=True):
+    def __init__(self, future_seq_len=50, dt_col="datetime", target_col="value", extra_features_col=None, drop_missing=True):
         """
         Constructor.
         :param drop_missing: whether to drop missing values in the curve, if this is set to False, an error will be
@@ -42,9 +42,12 @@ class TimeSequenceFeatures(BaseFeatures):
         self.config = None
         self.dt_col = dt_col
         self.target_col = target_col
+        self.extra_features_col = extra_features_col
         self.feature_data = None
         self.drop_missing = drop_missing
         self.generate_feature_list = None
+        self.past_seqlen = None
+        self.future_seqlen = future_seq_len
 
     def fit_transform(self, input_df, **config):
         """
@@ -63,13 +66,14 @@ class TimeSequenceFeatures(BaseFeatures):
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
         self.config = self._get_feat_config(**config)
+        self.past_seqlen = self.config.get("past_seqlen", 50)
         self._check_input(input_df)
         # print(input_df.shape)
         feature_data = self._get_features(input_df, self.config)
         self.scaler.fit(feature_data)
         # self.save("StandardScaler.npz")
         data_n = self._scale(feature_data)
-        (x, y) = self._roll(data_n, past_seqlen=50, future_seqlen=1)
+        (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
         return x, y
 
 
@@ -87,13 +91,13 @@ class TimeSequenceFeatures(BaseFeatures):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        if self.config is None:
+        if self.config is None or not self.past_seqlen or not self.future_seqlen:
             raise Exception("Needs to call fit_transform first before calling transform")
         # generate features
         feature_data = self._get_features(input_df, self.config)
         # select and standardize data
         data_n = self._scale(feature_data)
-        (x, y) = self._roll(data_n, past_seqlen=50, future_seqlen=1)
+        (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
         return x, y
 
     def save(self, file):
@@ -140,11 +144,13 @@ class TimeSequenceFeatures(BaseFeatures):
         :param config: the global config (usually from hyper parameter tuning)
         :return: config only for feature engineering
         """
-        feature_config_names = ["selected_features"]
+        self._check_config(**config)
+        feature_config_names = ["selected_features", "past_seqlen"]
         feat_config = {}
         for name in feature_config_names:
             if name not in config:
-                raise KeyError("Can not find " + name + " in config!")
+                continue
+                # raise KeyError("Can not find " + name + " in config!")
             feat_config[name] = config[name]
         return feat_config
 
@@ -268,10 +274,10 @@ class TimeSequenceFeatures(BaseFeatures):
         return feature_matrix[cols]
 
     def _get_optional_parameters(self):
-        return set("selected_features")
+        return set(["selected_features"])
 
     def _get_required_parameters(self):
-        return set("past_seqlen")
+        return set(["past_seqlen"])
 
 
 if __name__ == "__main__":
@@ -285,7 +291,7 @@ if __name__ == "__main__":
                                        "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"],
               "lr": 0.001}
 
-    train_X, train_Y = feat.fit_transform(train_df, **config)
+    train_X, train_Y = feat.fit_transform(train_df, past_seqlen=50, future_seqlen=1, **config)
     print(train_X.shape)
     # feat.restore("StandardScaler.npz")
     test_X, test_Y = feat.transform(test_df)

@@ -129,7 +129,8 @@ class TimeSequencePredictor(object):
         # target_list = ["value"]
         # ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col)
 
-        ft = DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz')
+        # ft = DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz')
+        ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col, self.drop_missing)
 
         # model
         model = VanillaLSTM(check_optional_config=False)
@@ -197,7 +198,7 @@ if __name__ == "__main__":
                                 target_col="value",
                                 extra_features_col=None, )
     pipeline = tsp.fit(train_df,
-                       validation_df=None,
+                       validation_df=val_df,
                        metric="mean_squared_error")
 
     print("evaluate:", pipeline.evaluate(test_df, metric=["mean_squared_error", "r_square"]))
