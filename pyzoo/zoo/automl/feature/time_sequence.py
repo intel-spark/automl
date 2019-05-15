@@ -160,27 +160,38 @@ class TimeSequenceFeatures(BaseFeatures):
         :param input_df:
         :return:
         """
-        # check missing values
-        if self.drop_missing:
-            input_df = input_df.dropna()
-        else:
-            is_nan = pd.isna(input_df)
-            if is_nan.any(axis=None):
-                raise ValueError("Missing value in input dataframe!")
-
+        # check NaT in datetime
         datetime = input_df[self.dt_col]
+        is_nat = pd.isna(datetime)
+        if is_nat.any(axis=None):
+                raise ValueError("Missing datetime in input dataframe!")
+
+        # check uniform (is that necessary?)
         interval = datetime[1] - datetime[0]
 
-        if not all([datetime[i] - datetime[i-1] == interval for i in range(1, len(datetime))]):
+        if not all([datetime[i] - datetime[i - 1] == interval for i in range(1, len(datetime))]):
             raise ValueError("Input time sequence intervals are not uniform!")
+
+        # check missing values
+        if not self.drop_missing:
+            is_nan = pd.isna(input_df)
+            if is_nan.any(axis=None):
+                raise ValueError("Missing values in input dataframe!")
 
         return input_df
 
     def _roll_data(self, data, seq_len):
         result = []
+        mask = []
         for i in range(len(data) - seq_len):
             result.append(data[i : i + seq_len])
-        return np.asarray(result)
+
+            if pd.isna(data[i : i + seq_len]).any(axis=None):
+                mask.append(0)
+            else:
+                mask.append(1)
+
+        return np.asarray(result), np.asarray(mask)
 
     def _roll(self, dataframe, past_seqlen, future_seqlen):
         """
@@ -197,11 +208,11 @@ class TimeSequenceFeatures(BaseFeatures):
         """
         x = dataframe[0:-future_seqlen].values
         y = dataframe[past_seqlen:][0].values
-        output_x = self._roll_data(x, past_seqlen)
-        output_y = self._roll_data(y, future_seqlen)
+        output_x, mask_x = self._roll_data(x, past_seqlen)
+        output_y, mask_y = self._roll_data(y, future_seqlen)
         # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
-
-        return output_x, output_y
+        mask = (mask_x == 1) & (mask_y == 1)
+        return output_x[mask], output_y[mask]
 
     def _scale(self, data):
         """
@@ -282,7 +293,7 @@ class TimeSequenceFeatures(BaseFeatures):
 
 if __name__ == "__main__":
     from zoo.automl.common.util import load_nytaxi_data_df
-    csv_path = "/home/shan/sources/automl/data/nyc_taxi.csv"
+    csv_path = "../../../../data/nyc_taxi.csv"
     train_df, _, test_df = load_nytaxi_data_df(csv_path)
 
     feat = TimeSequenceFeatures(dt_col="datetime", target_col="value", drop_missing=True)
@@ -295,6 +306,8 @@ if __name__ == "__main__":
     print(train_X.shape)
     # feat.restore("StandardScaler.npz")
     test_X, test_Y = feat.transform(test_df)
+    print(test_X.shape)
+
     feature_list = feat.get_generate_features()
     print(feature_list)
 #
