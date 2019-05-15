@@ -246,7 +246,7 @@ class TimeSequenceFeatures(BaseFeatures):
         feature_matrix, feature_defs = ft.dfs(entityset=es,
                                               target_entity="time_seq",
                                               agg_primitives=["count"],
-                                              trans_primitives=["month", "weekday", "day", "hour", "percentile",
+                                              trans_primitives=["month", "weekday", "day", "hour",
                                                                 "is_weekend", IsAwake, IsBusyHours])
         return feature_matrix, feature_defs
 
@@ -277,20 +277,21 @@ class TimeSequenceFeatures(BaseFeatures):
 if __name__ == "__main__":
     from zoo.automl.common.util import load_nytaxi_data_df
     csv_path = "/home/shan/sources/automl/data/nyc_taxi.csv"
-    train_df, test_df = load_nytaxi_data_df(csv_path)
+    train_df, _, test_df = load_nytaxi_data_df(csv_path)
 
     feat = TimeSequenceFeatures(dt_col="datetime", target_col="value", drop_missing=True)
-    config = {"selected_features": ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)", "HOUR(datetime)",
-                                       "PERCENTILE(value)", "IS_WEEKEND(datetime)",
+    config = {"selected_features": ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)",
+                                    "HOUR(datetime)", "IS_WEEKEND(datetime)",
                                        "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"],
               "lr": 0.001}
 
     train_X, train_Y = feat.fit_transform(train_df, **config)
+    print(train_X.shape)
     # feat.restore("StandardScaler.npz")
     test_X, test_Y = feat.transform(test_df)
     feature_list = feat.get_generate_features()
     print(feature_list)
-
+#
 # class DummyTimeSequenceFeatures(BaseFeatures):
 #     """
 #     A Dummy Feature Transformer that just load prepared data

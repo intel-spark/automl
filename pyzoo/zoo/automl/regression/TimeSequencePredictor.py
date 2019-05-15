@@ -189,7 +189,7 @@ class TimeSequencePredictor(object):
 
 
 if __name__ == "__main__":
-    train_df, test_df = load_nytaxi_data_df("../../../../data/nyc_taxi.csv")
+    train_df, val_df, test_df = load_nytaxi_data_df("../../../../data/nyc_taxi.csv")
     # print(train_df.describe())
     # print(test_df.describe())
 
