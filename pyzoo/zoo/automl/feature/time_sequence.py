@@ -49,6 +49,7 @@ class TimeSequenceFeatures(BaseFeatures):
         self.past_seqlen = None
         self.future_seqlen = future_seq_len
 
+
     def fit_transform(self, input_df, **config):
         """
         Fit data and transform the raw data to features. This is used in training for hyper parameter searching.
@@ -66,16 +67,14 @@ class TimeSequenceFeatures(BaseFeatures):
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
         self.config = self._get_feat_config(**config)
-        self.past_seqlen = self.config.get("past_seqlen", 50)
         self._check_input(input_df)
         # print(input_df.shape)
         feature_data = self._get_features(input_df, self.config)
         self.scaler.fit(feature_data)
-        # self.save("StandardScaler.npz")
         data_n = self._scale(feature_data)
         (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
-        return x, y
 
+        return x, y
 
     def transform(self, input_df):
         """
@@ -91,8 +90,8 @@ class TimeSequenceFeatures(BaseFeatures):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        if self.config is None or not self.past_seqlen or not self.future_seqlen:
-            raise Exception("Needs to call fit_transform first before calling transform")
+        if self.config is None or self.past_seqlen is None:
+            raise Exception("Needs to call fit_transform or restore first before calling transform")
         # generate features
         feature_data = self._get_features(input_df, self.config)
         # select and standardize data
@@ -100,7 +99,7 @@ class TimeSequenceFeatures(BaseFeatures):
         (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
         return x, y
 
-    def save(self, file):
+    def save(self, file_path):
         """
         save the feature tools internal variables.
         Some of the variables are derived after fit_transform, so only saving config is not enough.
@@ -108,21 +107,21 @@ class TimeSequenceFeatures(BaseFeatures):
         :return:
         """
         # for StandardScaler()
-        np.savez(file, mean=self.scaler.mean_, scale=self.scaler.scale_)
-        print("The mean and scale value of StandardScalar are saved in " + file)
+        np.savez(file_path, mean=self.scaler.mean_, scale=self.scaler.scale_)
+        print("The mean and scale value of StandardScalar are saved in " + file_path)
         # with open(file, 'w') as output_file:
             # for StandardScaler()
             # json.dump({"mean": self.scaler.mean_, "scale": self.scaler.scale_}, output_file)
             # for minmaxScaler()
             # json.dump({"min": self.scaler.min_, "scale": self.scaler.scale_}, output_file)
 
-    def restore(self, file):
+    def restore(self, file_path, **config):
         """
         Restore variables from file
-        :param file: the dumped variables file
+        :param file_path: the dumped variables file
         :return:
         """
-        result = np.load(file)
+        result = np.load(file_path)
         # with open(file, 'r') as input_file:
         #     result = json.load(input_file)
 
@@ -130,6 +129,8 @@ class TimeSequenceFeatures(BaseFeatures):
         self.scaler = StandardScaler()
         self.scaler.mean_ = result["mean"]
         self.scaler.scale_ = result["scale"]
+
+        self.config = self._get_feat_config(**config)
         # print(self.scaler.transform(input_data))
 
         # for MinMaxScalar()
@@ -152,6 +153,7 @@ class TimeSequenceFeatures(BaseFeatures):
                 continue
                 # raise KeyError("Can not find " + name + " in config!")
             feat_config[name] = config[name]
+        self.past_seqlen = feat_config.get("past_seqlen", 50)
         return feat_config
 
     def _check_input(self, input_df):
@@ -267,50 +269,61 @@ class TimeSequenceFeatures(BaseFeatures):
                                                                 "is_weekend", IsAwake, IsBusyHours])
         return feature_matrix, feature_defs
 
-    def write_generate_feature_list(self, feature_defs):
-        # to be confirmed
-        self.generate_feature_list = [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
+    # def write_generate_feature_list(self, feature_defs):
+    #     # to be confirmed
+    #     self.generate_feature_list = [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
+    #
+    # def get_generate_features(self):
+    #     if self.generate_feature_list is None:
+    #         raise Exception("Needs to call fit_transform first before calling get_generate_features")
+    #     return self.generate_feature_list
 
-    def get_generate_features(self):
-        if self.generate_feature_list is None:
-            raise Exception("Needs to call fit_transform first before calling get_generate_features")
-        return self.generate_feature_list
+    def get_feature_list(self, input_df):
+        feature_matrix, feature_defs = self._generate_features(input_df)
+        return [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
 
     def _get_features(self, input_df, config):
         feature_matrix, feature_defs = self._generate_features(input_df)
-        self.write_generate_feature_list(feature_defs)
+        # self.write_generate_feature_list(feature_defs)
         feature_cols = np.asarray(config.get("selected_features"))
         target_cols = np.array([self.target_col])
         cols = np.concatenate([target_cols, feature_cols])
         return feature_matrix[cols]
 
     def _get_optional_parameters(self):
-        return set(["selected_features"])
+        return set(["past_seqlen"])
 
     def _get_required_parameters(self):
-        return set(["past_seqlen"])
+        return set(["selected_features"])
 
 
 if __name__ == "__main__":
     from zoo.automl.common.util import load_nytaxi_data_df
     csv_path = "../../../../data/nyc_taxi.csv"
-    train_df, _, test_df = load_nytaxi_data_df(csv_path)
+    train_df, val_df, test_df = load_nytaxi_data_df(csv_path)
 
     feat = TimeSequenceFeatures(dt_col="datetime", target_col="value", drop_missing=True)
     config = {"selected_features": ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)",
                                     "HOUR(datetime)", "IS_WEEKEND(datetime)",
                                        "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"],
               "lr": 0.001}
+    feature_list = feat.get_feature_list(train_df)
+    # print(feature_list)
 
     train_X, train_Y = feat.fit_transform(train_df, past_seqlen=50, future_seqlen=1, **config)
     print(train_X.shape)
+    feat.save("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz")
+
     # feat.restore("StandardScaler.npz")
-    test_X, test_Y = feat.transform(test_df)
+    new_ft = TimeSequenceFeatures()
+    new_ft.restore("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz", **config)
+
+    test_X, test_Y = new_ft.transform(test_df)
     print(test_X.shape)
 
-    feature_list = feat.get_generate_features()
-    print(feature_list)
-#
+#     feature_list = feat.get_generate_features()
+#     print(feature_list)
+# #
 # class DummyTimeSequenceFeatures(BaseFeatures):
 #     """
 #     A Dummy Feature Transformer that just load prepared data

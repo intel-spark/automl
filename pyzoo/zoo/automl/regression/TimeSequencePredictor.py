@@ -19,7 +19,7 @@ import numpy as np
 from zoo.automl.search.abstract import *
 from zoo.automl.search.RayTuneSearchEngine import RayTuneSearchEngine
 
-from zoo.automl.feature.time_sequence import TimeSequenceFeatures, DummyTimeSequenceFeatures
+from zoo.automl.feature.time_sequence import TimeSequenceFeatures
 from zoo.automl.model.time_sequence import TimeSequenceModel
 from zoo.automl.model import VanillaLSTM
 from zoo.automl.pipeline.time_sequence import TimeSequencePipeline
@@ -132,16 +132,17 @@ class TimeSequencePredictor(object):
         # ft = DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz')
         ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col, self.drop_missing)
 
+        feature_list = ft.get_feature_list(input_df)
         # model
         model = VanillaLSTM(check_optional_config=False)
 
         search_space = {
             # -------- feature related parameters
-            # "selected_features": RandomSample(
-            #    lambda spec: np.random.choice(
-            #        feature_list,
-            #        size=np.random.randint(low=3, high=len(feature_list), size=1),
-            #        replace=False)),
+            "selected_features": RandomSample(
+               lambda spec: np.random.choice(
+                   feature_list,
+                   size=np.random.randint(low=3, high=len(feature_list), size=1),
+                   replace=False)),
 
             # --------- model related parameters
             # 'input_shape_x': x_train.shape[1],
@@ -173,10 +174,10 @@ class TimeSequencePredictor(object):
 
         trials = searcher.run()
         best = searcher.get_best_trials(k=1)[0]  # get the best one trial, later could be n
-
         pipeline = self._make_pipeline(best,
-                                       feature_transformers=DummyTimeSequenceFeatures(
-                                           file_path='../../../../data/nyc_taxi_rolled_split.npz'),
+                                       feature_transformers=ft,
+                                       # feature_transformers=TimeSequenceFeatures(
+                                       #     file_path='../../../../data/nyc_taxi_rolled_split.npz'),
                                        model=VanillaLSTM(check_optional_config=False))
         return pipeline
 
@@ -184,7 +185,8 @@ class TimeSequencePredictor(object):
         isinstance(trial, TrialOutput)
         # TODO we need to save fitted parameters (not in config, e.g. min max for scalers, model weights)
         # for both transformers and model
-        feature_transformers.restore(trial.config)
+        # temp restore from two files
+        feature_transformers.restore("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz", **trial.config)
         model.restore(trial.model_path, **trial.config)
         return TimeSequencePipeline(feature_transformers=feature_transformers, model=model)
 
