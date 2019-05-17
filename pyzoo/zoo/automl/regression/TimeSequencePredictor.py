@@ -16,6 +16,10 @@
 
 
 import numpy as np
+import tempfile
+import zipfile
+import os
+import shutil
 from zoo.automl.search.abstract import *
 from zoo.automl.search.RayTuneSearchEngine import RayTuneSearchEngine
 
@@ -158,7 +162,7 @@ class TimeSequencePredictor(object):
 
         stop = {
             "reward_metric": -0.05,
-            "training_iteration": 20
+            "training_iteration": 2
         }
 
         searcher = RayTuneSearchEngine(logs_dir=self.logs_dir, ray_num_cpus=6, resources_per_trial={"cpu": 2})
@@ -186,8 +190,19 @@ class TimeSequencePredictor(object):
         # TODO we need to save fitted parameters (not in config, e.g. min max for scalers, model weights)
         # for both transformers and model
         # temp restore from two files
-        feature_transformers.restore("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz", **trial.config)
-        model.restore(trial.model_path, **trial.config)
+
+        dirname = tempfile.mkdtemp(prefix="automl_")
+        try:
+            with zipfile.ZipFile(trial.model_path) as zipfile:
+                zipfile.extractall(dirname)
+            model_path = os.path.join(dirname, "weights_tune.h5")
+            config_path = os.path.join(dirname, "feature_scalar.npz")
+        finally:
+            shutil.rmtree(dirname)
+
+        model.restore(model_path)
+        feature_transformers.restore(config_path, **trial.config)
+
         return TimeSequencePipeline(feature_transformers=feature_transformers, model=model)
 
 

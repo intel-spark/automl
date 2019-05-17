@@ -17,8 +17,15 @@
 import os
 import numpy as np
 import ray
+import tempfile
+import zipfile
+import shutil
 from ray import tune
 from copy import copy, deepcopy
+
+import tensorflow as tf
+
+tf.keras.models.save_model
 
 from zoo.automl.search.abstract import *
 
@@ -190,12 +197,26 @@ class RayTuneSearchEngine(SearchEngine):
                     raise ValueError("metric can only be \"mean_squared_error\" or \"r_square\"")
                 if reward_m > best_reward_m:
                     best_reward_m = reward_m
-                    trial_model.save(file_path="weights_tune.h5", **config)
-                    trial_ft.save(file_path="/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz")
+
+                    dirname = tempfile.mkdtemp(prefix="automl_")
+                    try:
+                        model_path = os.path.join(dirname, "weights_tune.h5")
+                        config_path = os.path.join(dirname, "feature_scalar.npz")
+
+                        trial_model.save(file_path=model_path, **config)
+                        trial_ft.save(file_path=config_path)
+
+                        with zipfile.ZipFile("all.zip", 'w') as f:
+                            for dirpath, dirnames, filenames in os.walk(dirname):
+                                for filename in filenames:
+                                    f.write(os.path.join(dirpath, filename), filename)
+                    finally:
+                        shutil.rmtree(dirname)
+
                 tune_reporter(
                     training_iteration=i,
                     reward_metric=reward_m,
-                    checkpoint="weights_tune.h5"
+                    checkpoint="all.zip"
                 )
 
         return train_func
