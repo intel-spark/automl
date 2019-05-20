@@ -31,7 +31,7 @@ class TimeSequenceFeatures(BaseFeatures):
     TimeSequence feature engineering
     """
 
-    def __init__(self, future_seq_len=50, dt_col="datetime", target_col="value", extra_features_col=None, drop_missing=True):
+    def __init__(self, future_seq_len=1, dt_col="datetime", target_col="value", extra_features_col=None, drop_missing=True):
         """
         Constructor.
         :param drop_missing: whether to drop missing values in the curve, if this is set to False, an error will be
@@ -72,17 +72,18 @@ class TimeSequenceFeatures(BaseFeatures):
         feature_data = self._get_features(input_df, self.config)
         self.scaler.fit(feature_data)
         data_n = self._scale(feature_data)
-        (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
+        (x, y) = self._roll_train(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
 
         return x, y
 
-    def transform(self, input_df):
+    def transform(self, input_df, is_train=True):
         """
         Transform data into features using the preset of configurations from fit_transform
         :param input_df: The input time series data frame, Example:
          datetime   value   "extra feature 1"   "extra feature 2"
          2019-01-01 1.9 1   2
          2019-01-02 2.3 0   2
+        :param is_train: If the input_df is for training.
         :return: tuple (x,y)
             x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
             dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
@@ -96,8 +97,21 @@ class TimeSequenceFeatures(BaseFeatures):
         feature_data = self._get_features(input_df, self.config)
         # select and standardize data
         data_n = self._scale(feature_data)
-        (x, y) = self._roll(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
-        return x, y
+        if is_train:
+            (x, y) = self._roll_train(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
+            return x, y
+        else:
+            x = self._roll_test(data_n, past_seqlen=self.past_seqlen)
+            self._get_y_pred_dt(input_df, self.past_seqlen)
+            return x
+
+    def post_processing(self, y_pred):
+        # for standard scalar
+        value_mean = self.scaler.mean_[0]
+        value_scale = self.scaler.scale_[0]
+        y_unscale = y_pred * value_scale + value_mean
+        self.y_pred_dt["value"] = y_unscale
+        return self.y_pred_dt
 
     def save(self, file_path):
         """
@@ -163,6 +177,7 @@ class TimeSequenceFeatures(BaseFeatures):
         :return:
         """
         # check NaT in datetime
+        input_df = input_df.reset_index()
         datetime = input_df[self.dt_col]
         is_nat = pd.isna(datetime)
         if is_nat.any(axis=None):
@@ -185,19 +200,20 @@ class TimeSequenceFeatures(BaseFeatures):
     def _roll_data(self, data, seq_len):
         result = []
         mask = []
-        for i in range(len(data) - seq_len):
-            result.append(data[i : i + seq_len])
+        for i in range(len(data) - seq_len + 1):
+            result.append(data[i: i + seq_len])
 
-            if pd.isna(data[i : i + seq_len]).any(axis=None):
+            if pd.isna(data[i: i + seq_len]).any(axis=None):
                 mask.append(0)
             else:
                 mask.append(1)
 
         return np.asarray(result), np.asarray(mask)
 
-    def _roll(self, dataframe, past_seqlen, future_seqlen):
+    def _roll_train(self, dataframe, past_seqlen, future_seqlen):
         """
         roll dataframe into sequence samples to be used in TimeSequencePredictor.
+        roll_train: split the whole dataset apart to build (x, y).
         :param df: a dataframe which has been resampled in uniform frequency.
         :param past_seqlen: the length of the past sequence
         :param future_seqlen: the length of the future sequence
@@ -215,6 +231,36 @@ class TimeSequenceFeatures(BaseFeatures):
         # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
         mask = (mask_x == 1) & (mask_y == 1)
         return output_x[mask], output_y[mask]
+
+    def _roll_test(self, dataframe, past_seqlen):
+        """
+        roll dataframe into sequence samples to be used in TimeSequencePredictor.
+        roll_test: the whole dataframe is regarded as x.
+        :param df: a dataframe which has been resampled in uniform frequency.
+        :param past_seqlen: the length of the past sequence
+        :return: x
+            x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
+            dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
+            the 2nd col is the target value (data type should be numeric)
+        """
+        x = dataframe.values
+        output_x, mask_x = self._roll_data(x, past_seqlen)
+        # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
+        mask = (mask_x == 1)
+        return output_x[mask]
+
+    def _get_y_pred_dt(self, input_df, past_seqlen):
+        """
+        :param dataframe:
+        :return:
+        """
+        input_df = input_df.reset_index(drop=True)
+        output_df = input_df.loc[past_seqlen:, [self.dt_col]].copy()
+        output_df = output_df.reset_index(drop=True)
+        time_delta = output_df.iloc[-1] - output_df.iloc[-2]
+        last_time = output_df.iloc[-1] + time_delta
+        output_df.loc[-1] = last_time
+        self.y_pred_dt = output_df
 
     def _scale(self, data):
         """
@@ -310,7 +356,7 @@ if __name__ == "__main__":
     feature_list = feat.get_feature_list(train_df)
     # print(feature_list)
 
-    train_X, train_Y = feat.fit_transform(train_df, past_seqlen=50, future_seqlen=1, **config)
+    train_X, train_Y = feat.fit_transform(train_df, **config)
     print(train_X.shape)
     feat.save("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz")
 
@@ -318,8 +364,21 @@ if __name__ == "__main__":
     new_ft = TimeSequenceFeatures()
     new_ft.restore("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz", **config)
 
-    test_X, test_Y = new_ft.transform(test_df)
+    test_X = new_ft.transform(test_df[:-1], is_train=False)
     print(test_X.shape)
+
+    # ft_1 = TimeSequenceFeatures()
+    _, test_Y = new_ft.transform(test_df, is_train=True)
+    print(test_Y.shape)
+
+    output_df = new_ft.post_processing(test_Y)
+    print("*"*10 + "output_df" + "*"*10)
+    print(output_df.loc[:10, "value"])
+    print("*"*10 + "test_df" + "*"*10)
+    test_df = test_df.reset_index(drop=True)
+    print(test_df.loc[:10, "value"])
+    #test post_processing
+
 
 #     feature_list = feat.get_generate_features()
 #     print(feature_list)

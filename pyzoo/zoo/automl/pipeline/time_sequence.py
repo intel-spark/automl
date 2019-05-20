@@ -38,13 +38,15 @@ class TimeSequencePipeline(Pipeline):
         :param metric:
         :return:
         """
-        x, y = self.feature_transformers.transform(input_df)
+        x, y = self.feature_transformers.transform(input_df, is_train=True)
         return self.model.evaluate(x, y, metric)
 
     def predict(self, input_df):
         # there might be no y in the data, TODO needs to fix in TimeSquenceFeatures
-        x, _ = self.feature_transformers.transform(input_df)
-        return self.model.predict(x)
+        x = self.feature_transformers.transform(input_df, is_train=False)
+        y_pred = self.model.predict(x)
+        y_output = self.feature_transformers.post_processing(y_pred)
+        return y_output
 
     def save(self, file, **config):
         """

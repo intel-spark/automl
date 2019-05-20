@@ -193,15 +193,20 @@ class TimeSequencePredictor(object):
 
         dirname = tempfile.mkdtemp(prefix="automl_")
         try:
-            with zipfile.ZipFile(trial.model_path) as zipfile:
-                zipfile.extractall(dirname)
+            with zipfile.ZipFile(trial.model_path) as zf:
+                zf.extractall(dirname)
+                print("files are extracted into" + dirname)
+                print(os.listdir(dirname))
+
             model_path = os.path.join(dirname, "weights_tune.h5")
             config_path = os.path.join(dirname, "feature_scalar.npz")
+            model.restore(model_path)
+            feature_transformers.restore(config_path, **trial.config)
         finally:
             shutil.rmtree(dirname)
 
-        model.restore(model_path)
-        feature_transformers.restore(config_path, **trial.config)
+        # model.restore(model_path)
+        # feature_transformers.restore(config_path, **trial.config)
 
         return TimeSequencePipeline(feature_transformers=feature_transformers, model=model)
 
