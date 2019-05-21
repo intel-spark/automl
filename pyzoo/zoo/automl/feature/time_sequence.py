@@ -72,6 +72,7 @@ class TimeSequenceFeatures(BaseFeatures):
         feature_data = self._get_features(input_df, self.config)
         self.scaler.fit(feature_data)
         data_n = self._scale(feature_data)
+        assert np.mean(data_n[0]) < 1e-5
         (x, y) = self._roll_train(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
 
         return x, y
@@ -106,6 +107,12 @@ class TimeSequenceFeatures(BaseFeatures):
             return x
 
     def post_processing(self, y_pred):
+        """
+        Used only in pipeline predict, after calling self.transform(input_df, is_train=False).
+        Post_processing includes converting the predicted array to dataframe and scalar inverse transform.
+        :param y_pred: Model prediction result (ndarray).
+        :return: Un_scaled dataframe with datetime.
+        """
         # for standard scalar
         value_mean = self.scaler.mean_[0]
         value_scale = self.scaler.scale_[0]
@@ -152,6 +159,10 @@ class TimeSequenceFeatures(BaseFeatures):
         # self.scaler.min_ = result["min"]
         # self.scaler.scale_ = result["scale"]
         # print(self.scaler.transform(input_data))
+
+    def get_feature_list(self, input_df):
+        feature_matrix, feature_defs = self._generate_features(input_df)
+        return [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
 
     def _get_feat_config(self, **config):
         """
@@ -324,10 +335,6 @@ class TimeSequenceFeatures(BaseFeatures):
     #         raise Exception("Needs to call fit_transform first before calling get_generate_features")
     #     return self.generate_feature_list
 
-    def get_feature_list(self, input_df):
-        feature_matrix, feature_defs = self._generate_features(input_df)
-        return [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
-
     def _get_features(self, input_df, config):
         feature_matrix, feature_defs = self._generate_features(input_df)
         # self.write_generate_feature_list(feature_defs)
@@ -358,26 +365,29 @@ if __name__ == "__main__":
 
     train_X, train_Y = feat.fit_transform(train_df, **config)
     print(train_X.shape)
-    feat.save("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz")
+    feat.save("feature_config.npz")
 
     # feat.restore("StandardScaler.npz")
     new_ft = TimeSequenceFeatures()
-    new_ft.restore("/home/shan/sources/automl/pyzoo/zoo/automl/config/feature_config.npz", **config)
+    new_ft.restore("feature_config.npz", **config)
 
-    test_X = new_ft.transform(test_df[:-1], is_train=False)
-    print(test_X.shape)
+    train_X_1 = new_ft.transform(train_df[:-1], is_train=False)
 
-    # ft_1 = TimeSequenceFeatures()
-    _, test_Y = new_ft.transform(test_df, is_train=True)
-    print(test_Y.shape)
-
-    output_df = new_ft.post_processing(test_Y)
+    # test_X = new_ft.transform(test_df[:-1], is_train=False)
+    # print(test_X.shape)
+    #
+    # # ft_1 = TimeSequenceFeatures()
+    # _, test_Y = new_ft.transform(test_df, is_train=True)
+    # print(test_Y.shape)
+    # print(train_Y)
+    # print(np.mean(np.reshape(train_Y, )))
+    output_df = new_ft.post_processing(train_Y)
     print("*"*10 + "output_df" + "*"*10)
     print(output_df.loc[:10, "value"])
-    print("*"*10 + "test_df" + "*"*10)
+    print("*"*10 + "train_df" + "*"*10)
     test_df = test_df.reset_index(drop=True)
-    print(test_df.loc[:10, "value"])
-    #test post_processing
+    print(train_df.loc[50   :60, "value"])
+
 
 
 #     feature_list = feat.get_generate_features()
