@@ -14,6 +14,8 @@ It consists of an automated machine learning libary based on Ray, and a speciall
 
 ## Example Usage for Time Sequence Prediction
 
+Current implementation only supports univariant prediction, which means features can be multivariant, while target value should only be one on each data point of the sequence.  
+
 ```automl.regression.TimeSequencePredictor.fit```
 
 ```automl.regression.TimeSequencePredictor.evaluate ```
