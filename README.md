@@ -4,7 +4,7 @@ It consists of an automated machine learning libary based on Ray, and a speciall
 
 ## Interfaces of AutoML library
 
-- ```Features```
+- ```FeatureTransformer```
 
 - ```Model```
 
