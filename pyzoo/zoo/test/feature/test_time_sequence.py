@@ -126,7 +126,7 @@ class TestTimeSequenceFeature:
 
         dirname = tempfile.mkdtemp(prefix="automl_test_feature")
         try:
-            feature_scalar_path = os.path.join(dirname, "feature_scalar.npz")
+            feature_scalar_path = os.path.join(dirname, "feature_scalar.json")
             feat.save(file_path=feature_scalar_path)
             new_ft = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
                                           target_col="values", drop_missing=True)

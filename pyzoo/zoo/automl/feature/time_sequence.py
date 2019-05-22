@@ -127,13 +127,11 @@ class TimeSequenceFeatures(BaseFeatures):
         :return:
         """
         # for StandardScaler()
-        np.savez(file_path, mean=self.scaler.mean_, scale=self.scaler.scale_)
-        print("The mean and scale value of StandardScalar are saved in " + file_path)
-        # with open(file, 'w') as output_file:
+        with open(file_path, 'w') as output_file:
             # for StandardScaler()
-            # json.dump({"mean": self.scaler.mean_, "scale": self.scaler.scale_}, output_file)
+            json.dump({"mean": self.scaler.mean_.tolist(), "scale": self.scaler.scale_.tolist()}, output_file)
             # for minmaxScaler()
-            # json.dump({"min": self.scaler.min_, "scale": self.scaler.scale_}, output_file)
+            # json.dump({"min": self.scaler.min_.tolist(), "scale": self.scaler.scale_.tolist()}, output_file)
 
     def restore(self, file_path, **config):
         """
@@ -141,22 +139,21 @@ class TimeSequenceFeatures(BaseFeatures):
         :param file_path: the dumped variables file
         :return:
         """
-        result = np.load(file_path)
-        # with open(file, 'r') as input_file:
-        #     result = json.load(input_file)
+        with open(file_path, 'r') as input_file:
+            result = json.load(input_file)
 
         # for StandardScalar()
         self.scaler = StandardScaler()
-        self.scaler.mean_ = result["mean"]
-        self.scaler.scale_ = result["scale"]
+        self.scaler.mean_ = np.asarray(result["mean"])
+        self.scaler.scale_ = np.asarray(result["scale"])
 
         self.config = self._get_feat_config(**config)
         # print(self.scaler.transform(input_data))
 
         # for MinMaxScalar()
         # self.scaler = MinMaxScaler()
-        # self.scaler.min_ = result["min"]
-        # self.scaler.scale_ = result["scale"]
+        # self.scaler.min_ = np.asarray(result["min"])
+        # self.scaler.scale_ = np.asarray(result["scale"])
         # print(self.scaler.transform(input_data))
 
     def get_feature_list(self, input_df):
@@ -326,15 +323,6 @@ class TimeSequenceFeatures(BaseFeatures):
                                               trans_primitives=["month", "weekday", "day", "hour",
                                                                 "is_weekend", IsAwake, IsBusyHours])
         return feature_matrix, feature_defs
-
-    # def write_generate_feature_list(self, feature_defs):
-    #     # to be confirmed
-    #     self.generate_feature_list = [feat.generate_name() for feat in feature_defs if isinstance(feat, TransformFeature)]
-    #
-    # def get_generate_features(self):
-    #     if self.generate_feature_list is None:
-    #         raise Exception("Needs to call fit_transform first before calling get_generate_features")
-    #     return self.generate_feature_list
 
     def _get_features(self, input_df, config):
         feature_matrix, feature_defs = self._generate_features(input_df)

@@ -199,7 +199,7 @@ class TimeSequencePredictor(object):
                 print(os.listdir(dirname))
 
             model_path = os.path.join(dirname, "weights_tune.h5")
-            config_path = os.path.join(dirname, "feature_scalar.npz")
+            config_path = os.path.join(dirname, "feature_scalar.json")
             model.restore(model_path)
             feature_transformers.restore(config_path, **trial.config)
         finally:
