@@ -14,8 +14,8 @@ It consists of an automated machine learning libary based on Ray, and a speciall
 
 ## Example Usage for Time Sequence Prediction
 
-```TimeSequencePredictor.fit```
+```automl.regression.TimeSequencePredictor.fit```
 
-```TimeSequencePredictor.evaluate ```
+```automl.regression.TimeSequencePredictor.evaluate ```
 
-```TimeSequencePredictor.predict```
+```automl.regression.TimeSequencePredictor.predict```
