@@ -49,7 +49,6 @@ class TimeSequenceFeatures(BaseFeatures):
         self.past_seqlen = None
         self.future_seqlen = future_seq_len
 
-
     def fit_transform(self, input_df, **config):
         """
         Fit data and transform the raw data to features. This is used in training for hyper parameter searching.
@@ -117,7 +116,7 @@ class TimeSequenceFeatures(BaseFeatures):
         value_mean = self.scaler.mean_[0]
         value_scale = self.scaler.scale_[0]
         y_unscale = y_pred * value_scale + value_mean
-        self.y_pred_dt["value"] = y_unscale
+        self.y_pred_dt[self.target_col] = y_unscale
         return self.y_pred_dt
 
     def save(self, file_path):
@@ -190,9 +189,11 @@ class TimeSequenceFeatures(BaseFeatures):
         # check NaT in datetime
         input_df = input_df.reset_index()
         datetime = input_df[self.dt_col]
+        if not np.issubdtype(datetime, np.datetime64):
+            raise ValueError("The dtype of datetime column is required to be np.datetime64!")
         is_nat = pd.isna(datetime)
         if is_nat.any(axis=None):
-                raise ValueError("Missing datetime in input dataframe!")
+            raise ValueError("Missing datetime in input dataframe!")
 
         # check uniform (is that necessary?)
         interval = datetime[1] - datetime[0]
@@ -266,12 +267,12 @@ class TimeSequenceFeatures(BaseFeatures):
         :return:
         """
         input_df = input_df.reset_index(drop=True)
-        output_df = input_df.loc[past_seqlen:, [self.dt_col]].copy()
-        output_df = output_df.reset_index(drop=True)
-        time_delta = output_df.iloc[-1] - output_df.iloc[-2]
-        last_time = output_df.iloc[-1] + time_delta
-        output_df.loc[-1] = last_time
-        self.y_pred_dt = output_df
+        pre_pred_dt = input_df.loc[past_seqlen:, [self.dt_col]].copy()
+        pre_pred_dt = pre_pred_dt.reset_index(drop=True)
+        time_delta = pre_pred_dt.iloc[-1] - pre_pred_dt.iloc[-2]
+        last_time = pre_pred_dt.iloc[-1] + time_delta
+        last_df = pd.DataFrame({self.dt_col: last_time})
+        self.y_pred_dt = pre_pred_dt.append(last_df, ignore_index=True)
 
     def _scale(self, data):
         """
@@ -341,7 +342,8 @@ class TimeSequenceFeatures(BaseFeatures):
         feature_cols = np.asarray(config.get("selected_features"))
         target_cols = np.array([self.target_col])
         cols = np.concatenate([target_cols, feature_cols])
-        return feature_matrix[cols]
+        target_feature_matrix = feature_matrix[cols]
+        return target_feature_matrix.astype(float)
 
     def _get_optional_parameters(self):
         return set(["past_seqlen"])
@@ -350,49 +352,6 @@ class TimeSequenceFeatures(BaseFeatures):
         return set(["selected_features"])
 
 
-if __name__ == "__main__":
-    from zoo.automl.common.util import load_nytaxi_data_df
-    csv_path = "../../../../data/nyc_taxi.csv"
-    train_df, val_df, test_df = load_nytaxi_data_df(csv_path)
-
-    feat = TimeSequenceFeatures(dt_col="datetime", target_col="value", drop_missing=True)
-    config = {"selected_features": ["MONTH(datetime)", "WEEKDAY(datetime)", "DAY(datetime)",
-                                    "HOUR(datetime)", "IS_WEEKEND(datetime)",
-                                       "IS_AWAKE(datetime)", "IS_BUSY_HOURS(datetime)"],
-              "lr": 0.001}
-    feature_list = feat.get_feature_list(train_df)
-    # print(feature_list)
-
-    train_X, train_Y = feat.fit_transform(train_df, **config)
-    print(train_X.shape)
-    feat.save("feature_config.npz")
-
-    # feat.restore("StandardScaler.npz")
-    new_ft = TimeSequenceFeatures()
-    new_ft.restore("feature_config.npz", **config)
-
-    train_X_1 = new_ft.transform(train_df[:-1], is_train=False)
-
-    # test_X = new_ft.transform(test_df[:-1], is_train=False)
-    # print(test_X.shape)
-    #
-    # # ft_1 = TimeSequenceFeatures()
-    # _, test_Y = new_ft.transform(test_df, is_train=True)
-    # print(test_Y.shape)
-    # print(train_Y)
-    # print(np.mean(np.reshape(train_Y, )))
-    output_df = new_ft.post_processing(train_Y)
-    print("*"*10 + "output_df" + "*"*10)
-    print(output_df.loc[:10, "value"])
-    print("*"*10 + "train_df" + "*"*10)
-    test_df = test_df.reset_index(drop=True)
-    print(train_df.loc[50   :60, "value"])
-
-
-
-#     feature_list = feat.get_generate_features()
-#     print(feature_list)
-# #
 # class DummyTimeSequenceFeatures(BaseFeatures):
 #     """
 #     A Dummy Feature Transformer that just load prepared data
