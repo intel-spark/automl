@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import json
 
 from keras.models import Sequential
 from keras.models import Model
@@ -32,10 +33,15 @@ class LSTMSeq2Seq(BaseModel):
         Constructor of LSTM Seq2Seq model
         """
         self.model = None
+        self.past_seq_len = None
+        self.feature_num = None
         self.future_seq_len = None
+        self.target_col_num = None
+        self.metric = None
+        self.latent_dim = None
         self.check_optional_config = check_optional_config
 
-    def _build_train(self, future_seq_len, **config):
+    def _build_train(self, **config):
         """
         build LSTM Seq2Seq model
         :param config:
@@ -47,7 +53,7 @@ class LSTMSeq2Seq(BaseModel):
         self.dropout = config.get('dropout', 0.2)
 
         # Define an input sequence and process it.
-        self.encoder_inputs = Input(shape=(None, 9), name="encoder_inputs")
+        self.encoder_inputs = Input(shape=(self.past_seq_len, self.feature_num), name="encoder_inputs")
         encoder = LSTM(units=self.latent_dim,
                        dropout=self.dropout,
                        return_state=True,
@@ -57,7 +63,7 @@ class LSTMSeq2Seq(BaseModel):
         self.encoder_states = [state_h, state_c]
 
         # Set up the decoder, using `encoder_states` as initial state.
-        self.decoder_inputs = Input(shape=(None, 1), name="decoder_inputs")
+        self.decoder_inputs = Input(shape=(self.future_seq_len, self.target_col_num), name="decoder_inputs")
         # We set up our decoder to return full output sequences,
         # and to return internal states as well. We don't use the
         # return states in the training model, but we will use them in inference.
@@ -69,7 +75,7 @@ class LSTMSeq2Seq(BaseModel):
         decoder_outputs, _, _ = self.decoder_lstm(self.decoder_inputs,
                                                   initial_state=self.encoder_states)
 
-        self.decoder_dense = Dense(future_seq_len, name="decoder_dense")
+        self.decoder_dense = Dense(self.future_seq_len, name="decoder_dense")
         decoder_outputs = self.decoder_dense(decoder_outputs)
 
         # Define the model that will turn
@@ -79,6 +85,16 @@ class LSTMSeq2Seq(BaseModel):
                            metrics=[self.metric],
                            optimizer=keras.optimizers.RMSprop(lr=config.get('lr', 0.001)))
         return self.model
+
+    def _restore_model(self):
+        self.encoder_inputs = self.model.input[0]  # input_1
+        encoder_outputs, state_h_enc, state_c_enc = self.model.layers[2].output  # lstm_1
+        self.encoder_states = [state_h_enc, state_c_enc]
+
+        self.decoder_inputs = self.model.input[1]  # input_2
+        self.decoder_lstm = self.model.layers[3]
+
+        self.decoder_dense = self.model.layers[4]
 
     def _build_inference(self):
         # from our previous model - mapping encoder sequence to state vectors
@@ -105,24 +121,24 @@ class LSTMSeq2Seq(BaseModel):
         states_value = encoder_model.predict(input_seq)
 
         # Generate empty target sequence of length 1.
-        target_seq = np.zeros((len(input_seq), 1))
+        target_seq = np.zeros((len(input_seq), 1, self.target_col_num))
 
         # Populate the first target sequence with end of encoding series value
-        target_seq[:, 0] = input_seq[:, -1, 0]
+        target_seq[:, 0] = input_seq[:, -1, :self.target_col_num]
 
         # Sampling loop for a batch of sequences - we will fill decoded_seq with predictions
         # (to simplify, here we assume a batch of size 1).
 
-        decoded_seq = np.zeros((len(input_seq), self.future_seq_len))
+        decoded_seq = np.zeros((len(input_seq), self.future_seq_len, self.target_col_num))
 
         for i in range(self.future_seq_len):
             output, h, c = decoder_model.predict([target_seq] + states_value)
 
-            decoded_seq[:, i] = output[:, 0, 0]
+            decoded_seq[:, i] = output[:, 0]
 
             # Update the target sequence (of length 1).
-            target_seq = np.zeros((len(input_seq), 1))
-            target_seq[:, 0] = output[:, 0, 0]
+            target_seq = np.zeros((len(input_seq), 1, self.target_col_num))
+            target_seq[:, 0] = output[:, 0]
 
             # Update states
             states_value = [h, c]
@@ -132,15 +148,24 @@ class LSTMSeq2Seq(BaseModel):
     def _get_decoder_inputs(self, x, y):
         """
         lagged target series for teacher forcing
-        :param y:
-        :return:
+        decoder_input data is one timestamp ahead of y
+        :param x: 3-d array in format of (sample_num, past_sequence_len, feature_num)
+        :param y: 3-d array in format of (sample_num, future_sequence_len, target_col_num)
+                  Need to expand dimension if y is a 2-d array with one target col
+        :return: 3-d array of decoder inputs
         """
         decoder_input_data = np.zeros(y.shape)
         decoder_input_data[1:, ] = y[:-1, ]
-        decoder_input_data[0, 0] = x[-1, -1, 0]
-        if len(y[1]) > 1:
-            decoder_input_data[0, 1:] = y[0, :-1]
+        decoder_input_data[0, 0] = x[-1, -1, :self.target_col_num]
+        decoder_input_data[0, 1:] = y[0, :-1]
+
         return decoder_input_data
+
+    def _get_len(self, x, y):
+        self.past_seq_len = x.shape[1]
+        self.feature_num = x.shape[2]
+        self.future_seq_len = y.shape[1]
+        self.target_col_num = y.shape[2]
 
     def fit_eval(self, x, y, validation_data=None, **config):
         """
@@ -156,27 +181,31 @@ class LSTMSeq2Seq(BaseModel):
         :param config: optimization hyper parameters
         :return: the resulting metric
         """
-        self.future_seq_len = y.shape[1]
-        print("future_seq_len is", self.future_seq_len)
+        self._get_len(x, y)
+
         # if model is not initialized, __build the model
         if self.model is None:
-            self._build_train(self.future_seq_len, **config)
+            self._build_train(**config)
 
         decoder_input_data = self._get_decoder_inputs(x, y)
+        val_x, val_y = validation_data
+        val_decoder_input = self._get_decoder_inputs(val_x, val_y)
+        new_validation_data = ([val_x, val_decoder_input], val_y)
+
         hist = self.model.fit([x, decoder_input_data], y,
-                              validation_data=validation_data,
+                              validation_data=new_validation_data,
                               batch_size=config.get('batch_size', 1024),
                               epochs=config.get('epochs', 1),
-                              verbose=0
+                              verbose=1
                               )
         # print(hist.history)
 
         if validation_data is None:
             # get train metrics
             # results = self.model.evaluate(x, y)
-            result = hist.history.get(self.metric)[0]
+            result = hist.history.get(self.metric)[-1]
         else:
-            result = hist.history.get('val_' + str(self.metric))[0]
+            result = hist.history.get('val_' + str(self.metric))[-1]
         return result
 
     def evaluate(self, x, y, metric=['mean_squared_error']):
@@ -189,6 +218,8 @@ class LSTMSeq2Seq(BaseModel):
         """
         e = Evaluator()
         y_pred = self.predict(x)
+        y = np.squeeze(y, axis=2)
+        y_pred = np.squeeze(y_pred, axis=2)
         return [e.evaluate(m, y, y_pred) for m in metric]
 
     def predict(self, x):
@@ -206,8 +237,22 @@ class LSTMSeq2Seq(BaseModel):
         :param config: the trial config
         :return:
         """
-        self.model.save("seq2seq_tmp.h5")
-        os.rename("seq2seq.h5", file_path)
+        model_path = file_path + "/seq2seq.h5"
+        config_path = file_path + "/config.json"
+
+        if not os.path.isdir(file_path):
+            os.mkdir(file_path)
+
+        self.model.save(model_path)
+        with open(config_path, "w") as output_file:
+            json.dump({"past_seq_len": self.past_seq_len,
+                      "feature_num": self.feature_num,
+                       "future_seq_len": self.future_seq_len,
+                       "target_col_num": self.target_col_num,
+                       "metric": self.metric,
+                       "latent_dim": self.latent_dim},
+                      output_file)
+        # os.rename("seq2seq_tmp.h5", file_path)
         pass
 
     def restore(self, file_path, **config):
@@ -217,9 +262,21 @@ class LSTMSeq2Seq(BaseModel):
         :param config: the trial config
         :return: the restored model
         """
-        #self.model = None
-        #self._build(**config)
-        self.model = keras.models.load_model(file_path)
+        model_path = file_path + "/seq2seq.h5"
+        config_path = file_path + "/config.json"
+
+        with open(config_path, 'r') as input_file:
+            result = json.load(input_file)
+
+        self.past_seq_len = result["past_seq_len"]
+        self.feature_num = result["feature_num"]
+        self.future_seq_len = result["future_seq_len"]
+        self.target_col_num = result["target_col_num"]
+        self.metric = result["metric"]
+        self.latent_dim = result["latent_dim"]
+
+        self.model = keras.models.load_model(model_path)
+        self._restore_model()
         #self.model.load_weights(file_path)
 
     def _get_required_parameters(self):
@@ -245,18 +302,28 @@ if __name__ == "__main__":
     model = LSTMSeq2Seq(check_optional_config=False)
     x_train, y_train, x_test, y_test = load_nytaxi_data('../../../../data/nyc_taxi_rolled_split.npz')
     y_train = np.expand_dims(y_train, axis=1)
+    y_train = np.expand_dims(y_train, axis=2)
+
     y_test = np.expand_dims(y_test, axis=1)
-    print(x_train.shape,y_train.shape,x_test.shape,y_test.shape)
+    y_test = np.expand_dims(y_test, axis=2)
+
     config = {
         # 'input_shape_x': x_train.shape[1],
         # 'input_shape_y': x_train.shape[-1],
         'out_units': 1,
         'dummy1': 1,
-        'batch_size': 1024,
-        'epochs': 1
+        'batch_size': 32,
+        'epochs': 2
     }
 
     print("fit_eval:", model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config))
     print("evaluate:", model.evaluate(x_test, y_test))
+    y_pred_before = model.predict(x_test)
+
     print("saving model")
-    model.save("testmodel.tmp.h5",**config)
+    model.save("./tmp", **config)
+
+    new_model = LSTMSeq2Seq(check_optional_config=False)
+    new_model.restore("./tmp", **config)
+    y_pred_after = new_model.predict(x_test)
+    np.testing.assert_allclose(y_pred_before, y_pred_after)
