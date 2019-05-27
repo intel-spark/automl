@@ -15,7 +15,7 @@
 #
 from featuretools import TransformFeature
 
-from zoo.automl.feature.abstract import BaseFeatures
+from zoo.automl.feature.abstract import BaseFeatureTransformer
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import pandas as pd
@@ -26,7 +26,7 @@ from featuretools.variable_types import Text, Numeric, DatetimeTimeIndex
 import json
 
 
-class TimeSequenceFeatures(BaseFeatures):
+class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
     """
     TimeSequence feature engineering
     """

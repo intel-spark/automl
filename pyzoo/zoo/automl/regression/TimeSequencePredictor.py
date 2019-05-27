@@ -23,7 +23,7 @@ import shutil
 from zoo.automl.search.abstract import *
 from zoo.automl.search.RayTuneSearchEngine import RayTuneSearchEngine
 
-from zoo.automl.feature.time_sequence import TimeSequenceFeatures
+from zoo.automl.feature.time_sequence import TimeSequenceFeatureTransformer
 from zoo.automl.model.time_sequence import TimeSequenceModel
 from zoo.automl.model import VanillaLSTM
 from zoo.automl.pipeline.time_sequence import TimeSequencePipeline
@@ -134,7 +134,7 @@ class TimeSequencePredictor(object):
         # ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col)
 
         # ft = DummyTimeSequenceFeatures(file_path='../../../../data/nyc_taxi_rolled_split.npz')
-        ft = TimeSequenceFeatures(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col, self.drop_missing)
+        ft = TimeSequenceFeatureTransformer(self.future_seq_len, self.dt_col, self.target_col, self.extra_features_col, self.drop_missing)
 
         feature_list = ft.get_feature_list(input_df)
         # model

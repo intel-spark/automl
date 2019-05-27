@@ -27,7 +27,7 @@ class TestTimeSequenceFeature:
         dates = pd.date_range('1/1/2019', periods=8)
         values = np.random.randn(8)
         df = pd.DataFrame({"datetime": dates, "values": values})
-        feat = TimeSequenceFeatures(dt_col="datetime", target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(dt_col="datetime", target_col="values", drop_missing=True)
         feature_list = feat.get_feature_list(df)
         assert set(feature_list) == set(['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)', 'DAY(datetime)',
                                 'IS_WEEKEND(datetime)', 'WEEKDAY(datetime)', 'MONTH(datetime)'])
@@ -38,8 +38,8 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"datetime": dates, "values": values})
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
         x, y = feat.fit_transform(df, **config)
         assert x.shape == (6, 2, 4)
         assert y.shape == (6, 1)
@@ -52,8 +52,8 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"datetime": dates.strftime('%m/%d/%Y'), "values": values})
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         with pytest.raises(ValueError) as excinfo:
             feat.fit_transform(df, **config)
@@ -73,8 +73,8 @@ class TestTimeSequenceFeature:
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         x, y = feat.fit_transform(df, **config)
         # mask_x = [1, 0, 0, 1, 1, 1]
@@ -90,8 +90,8 @@ class TestTimeSequenceFeature:
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         feat.fit_transform(df[:10], **config)
         val_x, val_y = feat.transform(df[10:], is_train=True)
@@ -105,8 +105,8 @@ class TestTimeSequenceFeature:
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         feat.fit_transform(df[:10], **config)
         test_x = feat.transform(df[10:], is_train=False)
@@ -119,8 +119,8 @@ class TestTimeSequenceFeature:
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         train_x, train_y = feat.fit_transform(df, **config)
 
@@ -128,8 +128,8 @@ class TestTimeSequenceFeature:
         try:
             feature_scalar_path = os.path.join(dirname, "feature_scalar.json")
             feat.save(file_path=feature_scalar_path)
-            new_ft = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                          target_col="values", drop_missing=True)
+            new_ft = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                                    target_col="values", drop_missing=True)
             new_ft.restore(file_path=feature_scalar_path, **config)
             test_x = new_ft.transform(df[:-1], is_train=False)
             assert np.array_equal(test_x, train_x)
@@ -143,8 +143,8 @@ class TestTimeSequenceFeature:
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
                   "past_seqlen": 2}
-        feat = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                    target_col="values", drop_missing=True)
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
 
         train_x, train_y = feat.fit_transform(df, **config)
 
@@ -152,8 +152,8 @@ class TestTimeSequenceFeature:
         try:
             feature_scalar_path = os.path.join(dirname, "feature_scalar.npz")
             feat.save(file_path=feature_scalar_path)
-            new_ft = TimeSequenceFeatures(future_seq_len=1, dt_col="datetime",
-                                          target_col="values", drop_missing=True)
+            new_ft = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                                    target_col="values", drop_missing=True)
             new_ft.restore(file_path=feature_scalar_path, **config)
             new_ft.transform(df[:-1], is_train=False)
             output_value_df = new_ft.post_processing(train_y)

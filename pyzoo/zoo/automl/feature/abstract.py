@@ -17,7 +17,7 @@
 from abc import ABC, abstractmethod
 
 
-class BaseFeatures(ABC):
+class BaseFeatureTransformer(ABC):
     """
     Abstract Base class for Feature transformers.
     """
