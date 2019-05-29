@@ -201,9 +201,9 @@ class RayTuneSearchEngine(SearchEngine):
                     dirname = tempfile.mkdtemp(prefix="automl_")
                     try:
                         model_path = os.path.join(dirname, "weights_tune.h5")
-                        config_path = os.path.join(dirname, "feature_scalar.json")
+                        config_path = os.path.join(dirname, "local_config.json")
 
-                        trial_model.save(file_path=model_path, **config)
+                        trial_model.save(model_path=model_path, config_path=config_path)
                         trial_ft.save(file_path=config_path)
 
                         with zipfile.ZipFile("all.zip", 'w') as f:

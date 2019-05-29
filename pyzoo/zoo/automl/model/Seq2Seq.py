@@ -26,6 +26,7 @@ from zoo.automl.common.util import *
 from zoo.automl.common.metrics import Evaluator
 
 
+
 class LSTMSeq2Seq(BaseModel):
 
     def __init__(self, check_optional_config=True):
@@ -231,28 +232,37 @@ class LSTMSeq2Seq(BaseModel):
         """
         return self._decode_sequence(x)
 
-    def save(self, file_path, **config):
+    def save(self, model_path, config_path):
         """
         save model to file.
-        :param file_path: the model file.
-        :param config: the trial config
+        :param model_path: the model file path to be saved to.
+        :param config_path: the config file path to be saved to.
         :return:
-        """
-        model_path = file_path + "/seq2seq.h5"
-        config_path = file_path + "/config.json"
+        """     
+#         model_path = file_path + "/seq2seq.h5"
+#         config_path = file_path + "/config.json"
 
         if not os.path.isdir(file_path):
             os.mkdir(file_path)
 
         self.model.save(model_path)
-        with open(config_path, "w") as output_file:
-            json.dump({"past_seq_len": self.past_seq_len,
-                      "feature_num": self.feature_num,
-                       "future_seq_len": self.future_seq_len,
-                       "target_col_num": self.target_col_num,
-                       "metric": self.metric,
-                       "latent_dim": self.latent_dim},
-                      output_file)
+        
+        config_to_save = {"past_seq_len": self.past_seq_len,
+                          "feature_num": self.feature_num,
+                          "future_seq_len": self.future_seq_len,
+                          "target_col_num": self.target_col_num,
+                          "metric": self.metric,
+                          "latent_dim": self.latent_dim}
+        save_config(config_path, config_to_save)
+
+#         with open(config_path, "w") as output_file:
+#             json.dump({"past_seq_len": self.past_seq_len,
+#                       "feature_num": self.feature_num,
+#                        "future_seq_len": self.future_seq_len,
+#                        "target_col_num": self.target_col_num,
+#                        "metric": self.metric,
+#                        "latent_dim": self.latent_dim},
+#                       output_file)
         # os.rename("seq2seq_tmp.h5", file_path)
         pass
 
@@ -263,18 +273,18 @@ class LSTMSeq2Seq(BaseModel):
         :param config: the trial config
         :return: the restored model
         """
-        model_path = file_path + "/seq2seq.h5"
-        config_path = file_path + "/config.json"
+#         model_path = file_path + "/seq2seq.h5"
+#         config_path = file_path + "/config.json"
 
-        with open(config_path, 'r') as input_file:
-            result = json.load(input_file)
+#         with open(config_path, 'r') as input_file:
+#             result = json.load(input_file)
 
-        self.past_seq_len = result["past_seq_len"]
-        self.feature_num = result["feature_num"]
-        self.future_seq_len = result["future_seq_len"]
-        self.target_col_num = result["target_col_num"]
-        self.metric = result["metric"]
-        self.latent_dim = result["latent_dim"]
+        self.past_seq_len = config["past_seq_len"]
+        self.feature_num = config["feature_num"]
+        self.future_seq_len = config["future_seq_len"]
+        self.target_col_num = config["target_col_num"]
+        self.metric = config["metric"]
+        self.latent_dim = config["latent_dim"]
 
         self.model = keras.models.load_model(model_path)
         self._restore_model()

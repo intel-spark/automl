@@ -120,6 +120,13 @@ class TimeSequencePredictor(object):
         """
         return self.pipeline.predict(input_df)
 
+    def save(self, file):
+        """
+        :param file:
+        :return:
+        """
+        return self.pipeline.save(file)
+
     def _hp_search(self,
                    input_df,
                    validation_df,
@@ -157,12 +164,12 @@ class TimeSequencePredictor(object):
             "dropout_1": 0.2,
             "lstm_2_units": 10,
             "dropout_2": RandomSample(lambda spec: np.random.uniform(0.2, 0.5)),
-            "batch_size": 10240,
+            "batch_size": 1024,
         }
 
         stop = {
             "reward_metric": -0.05,
-            "training_iteration": 2
+            "training_iteration": 10
         }
 
         searcher = RayTuneSearchEngine(logs_dir=self.logs_dir, ray_num_cpus=6, resources_per_trial={"cpu": 2})
@@ -185,30 +192,39 @@ class TimeSequencePredictor(object):
                                        model=VanillaLSTM(check_optional_config=False))
         return pipeline
 
+    def _print_config(self, best_config):
+        print("The best configurations are:")
+        for name, value in best_config.items():
+            print(name, ":", value)
+
     def _make_pipeline(self, trial, feature_transformers, model):
         isinstance(trial, TrialOutput)
         # TODO we need to save fitted parameters (not in config, e.g. min max for scalers, model weights)
         # for both transformers and model
         # temp restore from two files
 
+        self._print_config(trial.config)
         dirname = tempfile.mkdtemp(prefix="automl_")
         try:
             with zipfile.ZipFile(trial.model_path) as zf:
                 zf.extractall(dirname)
-                print("files are extracted into" + dirname)
-                print(os.listdir(dirname))
+                # print("files are extracted into" + dirname)
+                # print(os.listdir(dirname))
 
             model_path = os.path.join(dirname, "weights_tune.h5")
-            config_path = os.path.join(dirname, "feature_scalar.json")
-            model.restore(model_path)
-            feature_transformers.restore(config_path, **trial.config)
+            config_path = os.path.join(dirname, "local_config.json")
+            local_config = load_config(config_path)
+            all_config = trial.config.copy()
+            all_config.update(local_config)
+            model.restore(model_path, **all_config)
+            feature_transformers.restore(**all_config)
         finally:
             shutil.rmtree(dirname)
 
         # model.restore(model_path)
         # feature_transformers.restore(config_path, **trial.config)
 
-        return TimeSequencePipeline(feature_transformers=feature_transformers, model=model)
+        return TimeSequencePipeline(feature_transformers=feature_transformers, model=model, config=all_config)
 
 
 if __name__ == "__main__":
@@ -226,3 +242,14 @@ if __name__ == "__main__":
     print("evaluate:", pipeline.evaluate(test_df, metric=["mean_squared_error", "r_square"]))
     pred = pipeline.predict(test_df)
     print("predict:", pred.shape)
+
+    save_pipeline_file = "../../../saved_pipeline/"
+    pipeline.save(save_pipeline_file)
+
+    new_pipeline = TimeSequencePipeline()
+    new_pipeline.restore(save_pipeline_file)
+    print("evaluate:", new_pipeline.evaluate(test_df, metric=["mean_squared_error", "r_square"]))
+
+    new_pred = new_pipeline.predict(test_df)
+    print("predict:", pred.shape)
+    np.testing.assert_allclose(pred["value"].values, new_pred["value"].values)

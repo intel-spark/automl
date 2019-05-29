@@ -15,6 +15,7 @@
 #
 from featuretools import TransformFeature
 
+from zoo.automl.common.util import save_config
 from zoo.automl.feature.abstract import BaseFeatureTransformer
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
@@ -119,36 +120,51 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         self.y_pred_dt[self.target_col] = y_unscale
         return self.y_pred_dt
 
-    def save(self, file_path):
+    def save(self, file_path, replace=False):
         """
-        save the feature tools internal variables.
+        save the feature tools internal variables as well as the initialization args.
         Some of the variables are derived after fit_transform, so only saving config is not enough.
         :param: file : the file to be saved
         :return:
         """
         # for StandardScaler()
-        with open(file_path, 'w') as output_file:
-            # for StandardScaler()
-            json.dump({"mean": self.scaler.mean_.tolist(), "scale": self.scaler.scale_.tolist()}, output_file)
+        data_to_save = {"mean": self.scaler.mean_.tolist(),
+                        "scale": self.scaler.scale_.tolist(),
+                        "future_seq_len": self.future_seqlen,
+                        "dt_col": self.dt_col,
+                        "target_col": self.target_col,
+                        "extra_features_col": self.extra_features_col,
+                        "drop_missing": self.drop_missing
+                        }
+        save_config(file_path, data_to_save, replace=replace)
+
+        # with open(file_path, 'w') as output_file:
+        #     # for StandardScaler()
+        #     json.dump({"mean": self.scaler.mean_.tolist(), "scale": self.scaler.scale_.tolist()}, output_file)
             # for minmaxScaler()
             # json.dump({"min": self.scaler.min_.tolist(), "scale": self.scaler.scale_.tolist()}, output_file)
 
-    def restore(self, file_path, **config):
+    def restore(self, **config):
         """
         Restore variables from file
         :param file_path: the dumped variables file
         :return:
         """
-        with open(file_path, 'r') as input_file:
-            result = json.load(input_file)
+#         with open(file_path, 'r') as input_file:
+#             result = json.load(input_file)
 
         # for StandardScalar()
         self.scaler = StandardScaler()
-        self.scaler.mean_ = np.asarray(result["mean"])
-        self.scaler.scale_ = np.asarray(result["scale"])
+        self.scaler.mean_ = np.asarray(config["mean"])
+        self.scaler.scale_ = np.asarray(config["scale"])
 
         self.config = self._get_feat_config(**config)
-        # print(self.scaler.transform(input_data))
+
+        self.future_seqlen = config["future_seq_len"]
+        self.dt_col = config["dt_col"]
+        self.target_col = config["target_col"]
+        self.extra_features_col = config["extra_features_col"]
+        self.drop_missing = config["drop_missing"]
 
         # for MinMaxScalar()
         # self.scaler = MinMaxScaler()

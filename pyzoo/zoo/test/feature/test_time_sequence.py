@@ -18,6 +18,8 @@ import shutil
 import tempfile
 
 import pytest
+
+from zoo.automl.common.util import load_config
 from zoo.automl.feature.time_sequence import *
 
 
@@ -115,24 +117,45 @@ class TestTimeSequenceFeature:
     def test_save_restore(self):
         dates = pd.date_range('1/1/2019', periods=8)
         values = np.random.randn(8)
-        df = pd.DataFrame({"datetime": dates, "values": values})
+        df = pd.DataFrame({"dt": dates, "v": values})
 
-        config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
-        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
-                                              target_col="values", drop_missing=True)
+        # config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
+        #           "past_seqlen": 2}
+        future_seq_len = 2
+        dt_col = "dt"
+        target_col = "v"
+        drop_missing = True
+        feat = TimeSequenceFeatureTransformer(future_seq_len=future_seq_len,
+                                              dt_col=dt_col,
+                                              target_col=target_col,
+                                              drop_missing=drop_missing)
+
+        feature_list = feat.get_feature_list(df)
+        config = {"selected_features": feature_list,
+                  "past_seqlen": 2
+                  }
 
         train_x, train_y = feat.fit_transform(df, **config)
 
         dirname = tempfile.mkdtemp(prefix="automl_test_feature")
         try:
-            feature_scalar_path = os.path.join(dirname, "feature_scalar.json")
+            feature_scalar_path = os.path.join(dirname, "feature_config.json")
             feat.save(file_path=feature_scalar_path)
-            new_ft = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
-                                                    target_col="values", drop_missing=True)
-            new_ft.restore(file_path=feature_scalar_path, **config)
-            test_x = new_ft.transform(df[:-1], is_train=False)
+            new_ft = TimeSequenceFeatureTransformer()
+            restore_config = load_config(feature_scalar_path)
+            config.update(restore_config)
+
+            new_ft.restore(**config)
+            assert new_ft.future_seqlen == future_seq_len
+            assert new_ft.dt_col == dt_col
+            assert new_ft.target_col == target_col
+            assert new_ft.extra_features_col is None
+            assert new_ft.drop_missing == drop_missing
+
+            test_x = new_ft.transform(df[:-future_seq_len], is_train=False)
+
             assert np.array_equal(test_x, train_x)
+
         finally:
             shutil.rmtree(dirname)
 
