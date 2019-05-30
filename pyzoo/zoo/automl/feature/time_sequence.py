@@ -47,8 +47,8 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         self.feature_data = None
         self.drop_missing = drop_missing
         self.generate_feature_list = None
-        self.past_seqlen = None
-        self.future_seqlen = future_seq_len
+        self.past_seq_len = None
+        self.future_seq_len = future_seq_len
 
     def fit_transform(self, input_df, **config):
         """
@@ -73,7 +73,7 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         self.scaler.fit(feature_data)
         data_n = self._scale(feature_data)
         assert np.mean(data_n[0]) < 1e-5
-        (x, y) = self._roll_train(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
+        (x, y) = self._roll_train(data_n, past_seq_len=self.past_seq_len, future_seq_len=self.future_seq_len)
 
         return x, y
 
@@ -92,18 +92,19 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        if self.config is None or self.past_seqlen is None:
+        if self.config is None or self.past_seq_len is None:
             raise Exception("Needs to call fit_transform or restore first before calling transform")
+        self._check_input(input_df)
         # generate features
         feature_data = self._get_features(input_df, self.config)
         # select and standardize data
         data_n = self._scale(feature_data)
         if is_train:
-            (x, y) = self._roll_train(data_n, past_seqlen=self.past_seqlen, future_seqlen=self.future_seqlen)
+            (x, y) = self._roll_train(data_n, past_seq_len=self.past_seq_len, future_seq_len=self.future_seq_len)
             return x, y
         else:
-            x = self._roll_test(data_n, past_seqlen=self.past_seqlen)
-            self._get_y_pred_dt(input_df, self.past_seqlen)
+            x = self._roll_test(data_n, past_seq_len=self.past_seq_len)
+            self._get_y_pred_dt(input_df, self.past_seq_len)
             return x
 
     def post_processing(self, y_pred):
@@ -130,7 +131,7 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         # for StandardScaler()
         data_to_save = {"mean": self.scaler.mean_.tolist(),
                         "scale": self.scaler.scale_.tolist(),
-                        "future_seq_len": self.future_seqlen,
+                        "future_seq_len": self.future_seq_len,
                         "dt_col": self.dt_col,
                         "target_col": self.target_col,
                         "extra_features_col": self.extra_features_col,
@@ -160,7 +161,7 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
 
         self.config = self._get_feat_config(**config)
 
-        self.future_seqlen = config["future_seq_len"]
+        self.future_seq_len = config["future_seq_len"]
         self.dt_col = config["dt_col"]
         self.target_col = config["target_col"]
         self.extra_features_col = config["extra_features_col"]
@@ -183,14 +184,14 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         :return: config only for feature engineering
         """
         self._check_config(**config)
-        feature_config_names = ["selected_features", "past_seqlen"]
+        feature_config_names = ["selected_features", "past_seq_len"]
         feat_config = {}
         for name in feature_config_names:
             if name not in config:
                 continue
                 # raise KeyError("Can not find " + name + " in config!")
             feat_config[name] = config[name]
-        self.past_seqlen = feat_config.get("past_seqlen", 50)
+        self.past_seq_len = feat_config.get("past_seq_len", 50)
         return feat_config
 
     def _check_input(self, input_df):
@@ -201,17 +202,17 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         """
         # check NaT in datetime
         input_df = input_df.reset_index()
-        datetime = input_df[self.dt_col]
-        if not np.issubdtype(datetime, np.datetime64):
+        dt = input_df[self.dt_col]
+        if not np.issubdtype(dt, np.datetime64):
             raise ValueError("The dtype of datetime column is required to be np.datetime64!")
-        is_nat = pd.isna(datetime)
+        is_nat = pd.isna(dt)
         if is_nat.any(axis=None):
             raise ValueError("Missing datetime in input dataframe!")
 
         # check uniform (is that necessary?)
-        interval = datetime[1] - datetime[0]
+        interval = dt[1] - dt[0]
 
-        if not all([datetime[i] - datetime[i - 1] == interval for i in range(1, len(datetime))]):
+        if not all([dt[i] - dt[i - 1] == interval for i in range(1, len(dt))]):
             raise ValueError("Input time sequence intervals are not uniform!")
 
         # check missing values
@@ -220,6 +221,11 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
             if is_nan.any(axis=None):
                 raise ValueError("Missing values in input dataframe!")
 
+        # check if the last datetime is large than current time. In that case, feature tools generate NaN.from
+        last_datetime = dt.iloc[-1]
+        current_time = np.datetime64('today', 's')
+        if last_datetime > current_time:
+            raise ValueError("Last date time is bigger than current time!")
         return input_df
 
     def _roll_data(self, data, seq_len):
@@ -235,13 +241,13 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
 
         return np.asarray(result), np.asarray(mask)
 
-    def _roll_train(self, dataframe, past_seqlen, future_seqlen):
+    def _roll_train(self, dataframe, past_seq_len, future_seq_len):
         """
         roll dataframe into sequence samples to be used in TimeSequencePredictor.
         roll_train: split the whole dataset apart to build (x, y).
         :param df: a dataframe which has been resampled in uniform frequency.
-        :param past_seqlen: the length of the past sequence
-        :param future_seqlen: the length of the future sequence
+        :param past_seq_len: the length of the past sequence
+        :param future_seq_len: the length of the future sequence
         :return: tuple (x,y)
             x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
             dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
@@ -249,38 +255,41 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
-        x = dataframe[0:-future_seqlen].values
-        y = dataframe[past_seqlen:][0].values
-        output_x, mask_x = self._roll_data(x, past_seqlen)
-        output_y, mask_y = self._roll_data(y, future_seqlen)
+        max_past_seq_len = len(dataframe) - future_seq_len
+        if past_seq_len > max_past_seq_len:
+            raise ValueError("past_seq_len {} exceeds the maximum value {}".format(past_seq_len, future_seq_len))
+        x = dataframe[0:-future_seq_len].values
+        y = dataframe[past_seq_len:][0].values
+        output_x, mask_x = self._roll_data(x, past_seq_len)
+        output_y, mask_y = self._roll_data(y, future_seq_len)
         # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
         mask = (mask_x == 1) & (mask_y == 1)
         return output_x[mask], output_y[mask]
 
-    def _roll_test(self, dataframe, past_seqlen):
+    def _roll_test(self, dataframe, past_seq_len):
         """
         roll dataframe into sequence samples to be used in TimeSequencePredictor.
         roll_test: the whole dataframe is regarded as x.
         :param df: a dataframe which has been resampled in uniform frequency.
-        :param past_seqlen: the length of the past sequence
+        :param past_seq_len: the length of the past sequence
         :return: x
             x: 3-d array in format (no. of samples, past sequence length, 2+feature length), in the last
             dimension, the 1st col is the time index (data type needs to be numpy datetime type, e.g. "datetime64"),
             the 2nd col is the target value (data type should be numeric)
         """
         x = dataframe.values
-        output_x, mask_x = self._roll_data(x, past_seqlen)
+        output_x, mask_x = self._roll_data(x, past_seq_len)
         # assert output_x.shape[0] == output_y.shape[0], "The shape of output_x and output_y doesn't match! "
         mask = (mask_x == 1)
         return output_x[mask]
 
-    def _get_y_pred_dt(self, input_df, past_seqlen):
+    def _get_y_pred_dt(self, input_df, past_seq_len):
         """
         :param dataframe:
         :return:
         """
         input_df = input_df.reset_index(drop=True)
-        pre_pred_dt = input_df.loc[past_seqlen:, [self.dt_col]].copy()
+        pre_pred_dt = input_df.loc[past_seq_len:, [self.dt_col]].copy()
         pre_pred_dt = pre_pred_dt.reset_index(drop=True)
         time_delta = pre_pred_dt.iloc[-1] - pre_pred_dt.iloc[-2]
         last_time = pre_pred_dt.iloc[-1] + time_delta
@@ -350,7 +359,7 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         return target_feature_matrix.astype(float)
 
     def _get_optional_parameters(self):
-        return set(["past_seqlen"])
+        return set(["past_seq_len"])
 
     def _get_required_parameters(self):
         return set(["selected_features"])

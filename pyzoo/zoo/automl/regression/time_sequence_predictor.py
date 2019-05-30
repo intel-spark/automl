@@ -87,7 +87,7 @@ class TimeSequencePredictor(object):
         self.pipeline = self._hp_search(input_df,
                                         validation_df=validation_df,
                                         metric=metric)
-        return self
+        return self.pipeline
 
     def evaluate(self,
                  input_df,
@@ -120,13 +120,6 @@ class TimeSequencePredictor(object):
         """
         return self.pipeline.predict(input_df)
 
-    def save(self, file):
-        """
-        :param file:
-        :return:
-        """
-        return self.pipeline.save(file)
-
     def _hp_search(self,
                    input_df,
                    validation_df,
@@ -145,7 +138,7 @@ class TimeSequencePredictor(object):
 
         feature_list = ft.get_feature_list(input_df)
         # model
-        model = VanillaLSTM(check_optional_config=False)
+        model = VanillaLSTM(check_optional_config=False, future_seq_len=self.future_seq_len)
 
         search_space = {
             # -------- feature related parameters
