@@ -87,7 +87,7 @@ class TimeSequencePredictor(object):
         self.pipeline = self._hp_search(input_df,
                                         validation_df=validation_df,
                                         metric=metric)
-        return self
+        return self.pipeline
 
     def evaluate(self,
                  input_df,
@@ -119,13 +119,6 @@ class TimeSequencePredictor(object):
             2019-01-03  np.array([2, 3, ... 9])
         """
         return self.pipeline.predict(input_df)
-
-    def save(self, file):
-        """
-        :param file:
-        :return:
-        """
-        return self.pipeline.save(file)
 
     def _hp_search(self,
                    input_df,

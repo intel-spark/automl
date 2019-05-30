@@ -94,6 +94,7 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         """
         if self.config is None or self.past_seq_len is None:
             raise Exception("Needs to call fit_transform or restore first before calling transform")
+        self._check_input(input_df)
         # generate features
         feature_data = self._get_features(input_df, self.config)
         # select and standardize data
@@ -201,17 +202,17 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
         """
         # check NaT in datetime
         input_df = input_df.reset_index()
-        datetime = input_df[self.dt_col]
-        if not np.issubdtype(datetime, np.datetime64):
+        dt = input_df[self.dt_col]
+        if not np.issubdtype(dt, np.datetime64):
             raise ValueError("The dtype of datetime column is required to be np.datetime64!")
-        is_nat = pd.isna(datetime)
+        is_nat = pd.isna(dt)
         if is_nat.any(axis=None):
             raise ValueError("Missing datetime in input dataframe!")
 
         # check uniform (is that necessary?)
-        interval = datetime[1] - datetime[0]
+        interval = dt[1] - dt[0]
 
-        if not all([datetime[i] - datetime[i - 1] == interval for i in range(1, len(datetime))]):
+        if not all([dt[i] - dt[i - 1] == interval for i in range(1, len(dt))]):
             raise ValueError("Input time sequence intervals are not uniform!")
 
         # check missing values
@@ -220,6 +221,11 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
             if is_nan.any(axis=None):
                 raise ValueError("Missing values in input dataframe!")
 
+        # check if the last datetime is large than current time. In that case, feature tools generate NaN.from
+        last_datetime = dt.iloc[-1]
+        current_time = np.datetime64('today', 's')
+        if last_datetime > current_time:
+            raise ValueError("Last date time is bigger than current time!")
         return input_df
 
     def _roll_data(self, data, seq_len):
@@ -249,6 +255,9 @@ class TimeSequenceFeatureTransformer(BaseFeatureTransformer):
             y: y is 2-d numpy array in format (no. of samples, future sequence length) if future sequence
             length > 1, or 1-d numpy array in format (no. of samples, ) if future sequence length = 1
         """
+        max_past_seq_len = len(dataframe) - future_seq_len
+        if past_seq_len > max_past_seq_len:
+            raise ValueError("past_seq_len {} exceeds the maximum value {}".format(past_seq_len, future_seq_len))
         x = dataframe[0:-future_seq_len].values
         y = dataframe[past_seq_len:][0].values
         output_x, mask_x = self._roll_data(x, past_seq_len)

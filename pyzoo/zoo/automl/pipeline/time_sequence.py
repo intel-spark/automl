@@ -72,7 +72,6 @@ class TimeSequencePipeline(Pipeline):
         self.model.save(model_path, config_path)
         # check if ** is needed
         save_config(config_path, self.config)
-        pass
 
     def restore(self, file):
         """
@@ -86,4 +85,3 @@ class TimeSequencePipeline(Pipeline):
         all_config = load_config(config_path)
         self.model.restore(model_path, **all_config)
         self.feature_transformers.restore(**all_config)
-        pass

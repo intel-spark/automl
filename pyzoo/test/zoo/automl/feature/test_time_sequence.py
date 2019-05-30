@@ -35,16 +35,18 @@ class TestTimeSequenceFeature:
                                 'IS_WEEKEND(datetime)', 'WEEKDAY(datetime)', 'MONTH(datetime)'])
 
     def test_fit_transform(self):
-        dates = pd.date_range('1/1/2019', periods=8)
-        values = np.random.randn(8)
+        sample_num = 8
+        past_seq_len = 2
+        dates = pd.date_range('1/1/2019', periods=sample_num)
+        values = np.random.randn(sample_num)
         df = pd.DataFrame({"datetime": dates, "values": values})
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seq_len": 2}
+                  "past_seq_len": past_seq_len}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
         x, y = feat.fit_transform(df, **config)
-        assert x.shape == (6, 2, 4)
-        assert y.shape == (6, 1)
+        assert x.shape == (sample_num-past_seq_len, past_seq_len, 4)
+        assert y.shape == (sample_num-past_seq_len, 1)
         assert np.mean(np.concatenate((x[0, :, 0], y[:, 0]), axis=None)) < 1e-5
 
     def test_fit_transform_input_datetime(self):
@@ -65,6 +67,32 @@ class TestTimeSequenceFeature:
         df.loc[1, "datetime"] = None
         with pytest.raises(ValueError, match=r".* datetime .*"):
             feat.fit_transform(df, **config)
+
+        # if the last datetime is larger than current time, raise an error
+        dates = pd.date_range('1/1/2119', periods=8)
+        values = np.random.randn(8)
+        df = pd.DataFrame({"datetime": dates, "values": values})
+        config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
+                  "past_seq_len": 2}
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
+
+        with pytest.raises(ValueError, match=r".* current .*"):
+            feat.fit_transform(df, **config)
+
+    def test_fit_transform_past_seq_len(self):
+        # if the past_seq_len exceeds (sample_num - future_seq_len), raise an error
+        sample_num = 8
+        past_seq_len = 10
+        dates = pd.date_range('1/1/2019', periods=sample_num)
+        values = np.random.randn(sample_num)
+        df = pd.DataFrame({"datetime": dates, "values": values})
+        config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
+                  "past_seq_len": past_seq_len}
+        feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
+                                              target_col="values", drop_missing=True)
+        with pytest.raises(ValueError, match=r".*past_seq_len.*"):
+            x, y = feat.fit_transform(df, **config)
 
     def test_fit_transform_input_data(self):
         # if there is NaN in data other than datetime, drop the training sample.
