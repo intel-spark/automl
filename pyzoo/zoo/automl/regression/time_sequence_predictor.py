@@ -145,7 +145,7 @@ class TimeSequencePredictor(object):
 
         feature_list = ft.get_feature_list(input_df)
         # model
-        model = VanillaLSTM(check_optional_config=False)
+        model = VanillaLSTM(check_optional_config=False, future_seq_len=self.future_seq_len)
 
         search_space = {
             # -------- feature related parameters

@@ -39,7 +39,7 @@ class TestTimeSequenceFeature:
         values = np.random.randn(8)
         df = pd.DataFrame({"datetime": dates, "values": values})
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
         x, y = feat.fit_transform(df, **config)
@@ -53,7 +53,7 @@ class TestTimeSequenceFeature:
         values = np.random.randn(8)
         df = pd.DataFrame({"datetime": dates.strftime('%m/%d/%Y'), "values": values})
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
 
@@ -74,7 +74,7 @@ class TestTimeSequenceFeature:
         df.loc[2, "values"] = None
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
 
@@ -91,7 +91,7 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"datetime": dates, "values": values})
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
 
@@ -106,7 +106,7 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"datetime": dates, "values": values})
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
 
@@ -120,7 +120,7 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"dt": dates, "v": values})
 
         # config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-        #           "past_seqlen": 2}
+        #           "past_seq_len": 2}
         future_seq_len = 2
         dt_col = "dt"
         target_col = "v"
@@ -132,7 +132,7 @@ class TestTimeSequenceFeature:
 
         feature_list = feat.get_feature_list(df)
         config = {"selected_features": feature_list,
-                  "past_seqlen": 2
+                  "past_seq_len": 2
                   }
 
         train_x, train_y = feat.fit_transform(df, **config)
@@ -146,7 +146,7 @@ class TestTimeSequenceFeature:
             config.update(restore_config)
 
             new_ft.restore(**config)
-            assert new_ft.future_seqlen == future_seq_len
+            assert new_ft.future_seq_len == future_seq_len
             assert new_ft.dt_col == dt_col
             assert new_ft.target_col == target_col
             assert new_ft.extra_features_col is None
@@ -165,7 +165,7 @@ class TestTimeSequenceFeature:
         df = pd.DataFrame({"datetime": dates, "values": values})
 
         config = {"selected_features": ['IS_AWAKE(datetime)', 'IS_BUSY_HOURS(datetime)', 'HOUR(datetime)'],
-                  "past_seqlen": 2}
+                  "past_seq_len": 2}
         feat = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
                                               target_col="values", drop_missing=True)
 

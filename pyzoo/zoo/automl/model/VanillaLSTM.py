@@ -26,12 +26,13 @@ from zoo.automl.common.metrics import Evaluator
 
 class VanillaLSTM(BaseModel):
 
-    def __init__(self, check_optional_config=True):
+    def __init__(self, check_optional_config=True, future_seq_len=1):
         """
         Constructor of Vanilla LSTM model
         """
         self.model = None
         self.check_optional_config = check_optional_config
+        self.future_seq_len = future_seq_len
 
     def _build(self, **config):
         """
@@ -54,7 +55,7 @@ class VanillaLSTM(BaseModel):
             return_sequences=False))
         self.model.add(Dropout(config.get('dropout_2', 0.2)))
 
-        self.model.add(Dense(units=config.get('out_units', 1)))
+        self.model.add(Dense(self.future_seq_len))
         self.model.compile(loss='mse',
                            metrics=[self.metric],
                            optimizer=keras.optimizers.RMSprop(lr=config.get('lr', 0.001)))
@@ -123,7 +124,11 @@ class VanillaLSTM(BaseModel):
         """
         self.model.save("vanilla_lstm_tmp.h5")
         os.rename("vanilla_lstm_tmp.h5", model_path)
-        pass
+
+        config_to_save = {
+            "future_seq_len": self.future_seq_len
+        }
+        save_config(config_path, config_to_save)
 
     def restore(self, model_path, **config):
         """
@@ -141,7 +146,7 @@ class VanillaLSTM(BaseModel):
         return {
             # 'input_shape_x',
             # 'input_shape_y',
-            'out_units'
+            # 'out_units'
         }
 
     def _get_optional_parameters(self):
