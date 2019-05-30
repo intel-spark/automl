@@ -17,8 +17,15 @@
 import os
 import numpy as np
 import ray
+import tempfile
+import zipfile
+import shutil
 from ray import tune
 from copy import copy, deepcopy
+
+import tensorflow as tf
+
+tf.keras.models.save_model
 
 from zoo.automl.search.abstract import *
 
@@ -120,7 +127,9 @@ class RayTuneSearchEngine(SearchEngine):
             raise GoodError("This works.")
 
         try:
-            self.train_func({'out_units': 1}, mock_reporter)
+            self.train_func({'out_units': 1, 'selected_features': ["MONTH(datetime)", "WEEKDAY(datetime)"]}, mock_reporter)
+            # self.train_func(self.search_space, mock_reporter)
+
         except TypeError as e:
             print("Forgot to modify function signature?")
             raise e
@@ -149,7 +158,7 @@ class RayTuneSearchEngine(SearchEngine):
         ft_id = ray.put(feature_transformers)
         model_id = ray.put(model)
 
-        if validation_df is not None:
+        if validation_df is not None and not validation_df.empty:
             validation_df_id = ray.put(validation_df)
 
         def train_func(config, tune_reporter):
@@ -162,13 +171,12 @@ class RayTuneSearchEngine(SearchEngine):
             # handling input
             global_input_df = ray.get(input_df_id)
             trial_input_df = deepcopy(global_input_df)
-            trial_ft.fit(trial_input_df, **config)
-
-            (x_train, y_train) = trial_ft.transform(trial_input_df)
+            (x_train, y_train) = trial_ft.fit_transform(trial_input_df, **config)
+            # trial_ft.fit(trial_input_df, **config)
 
             # handling validation data
             validation_data = None
-            if validation_df is not None:
+            if validation_df is not None and not validation_df.empty:
                 global_validation_df = ray.get(validation_df_id)
                 trial_validation_df = deepcopy(global_validation_df)
                 validation_data = trial_ft.transform(trial_validation_df)
@@ -189,11 +197,26 @@ class RayTuneSearchEngine(SearchEngine):
                     raise ValueError("metric can only be \"mean_squared_error\" or \"r_square\"")
                 if reward_m > best_reward_m:
                     best_reward_m = reward_m
-                    trial_model.save(file_path="weights_tune.h5", **config)
+
+                    dirname = tempfile.mkdtemp(prefix="automl_")
+                    try:
+                        model_path = os.path.join(dirname, "weights_tune.h5")
+                        config_path = os.path.join(dirname, "local_config.json")
+
+                        trial_model.save(model_path=model_path, config_path=config_path)
+                        trial_ft.save(file_path=config_path)
+
+                        with zipfile.ZipFile("all.zip", 'w') as f:
+                            for dirpath, dirnames, filenames in os.walk(dirname):
+                                for filename in filenames:
+                                    f.write(os.path.join(dirpath, filename), filename)
+                    finally:
+                        shutil.rmtree(dirname)
+
                 tune_reporter(
                     training_iteration=i,
                     reward_metric=reward_m,
-                    checkpoint="weights_tune.h5"
+                    checkpoint="all.zip"
                 )
 
         return train_func

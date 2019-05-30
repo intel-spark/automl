@@ -81,7 +81,7 @@ class VanillaLSTM(BaseModel):
         hist = self.model.fit(x, y,
                               validation_data=validation_data,
                               batch_size=config.get('batch_size', 1024),
-                              epochs=config.get('epochs', 1),
+                              epochs=config.get('epochs', 20),
                               verbose=0
                               )
         # print(hist.history)
@@ -114,27 +114,27 @@ class VanillaLSTM(BaseModel):
         """
         return self.model.predict(x)
 
-    def save(self, file_path, **config):
+    def save(self, model_path, config_path):
         """
         save model to file.
-        :param file_path: the model file.
-        :param config: the trial config
+        :param model_path: the model file.
+        :param config_path: the config file
         :return:
         """
         self.model.save("vanilla_lstm_tmp.h5")
-        os.rename("vanilla_lstm_tmp.h5", file_path)
+        os.rename("vanilla_lstm_tmp.h5", model_path)
         pass
 
-    def restore(self, file_path, **config):
+    def restore(self, model_path, **config):
         """
         restore model from file
-        :param file_path: the model file
+        :param model_path: the model file
         :param config: the trial config
         :return: the restored model
         """
         #self.model = None
         #self._build(**config)
-        self.model = keras.models.load_model(file_path)
+        self.model = keras.models.load_model(model_path)
         #self.model.load_weights(file_path)
 
     def _get_required_parameters(self):
@@ -155,7 +155,6 @@ class VanillaLSTM(BaseModel):
             'epochs',
             'batch_size'
         }
-
 
 
 if __name__ == "__main__":

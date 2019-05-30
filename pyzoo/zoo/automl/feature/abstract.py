@@ -17,14 +17,14 @@
 from abc import ABC, abstractmethod
 
 
-class BaseFeatures(ABC):
+class BaseFeatureTransformer(ABC):
     """
     Abstract Base class for Feature transformers.
     """
     check_optional_config = False
 
     @abstractmethod
-    def fit(self, input_df, **config):
+    def fit_transform(self, input_df, **config):
         """
         fit data with the input dataframe
         Will refit the scalars to this data if any.
@@ -44,7 +44,7 @@ class BaseFeatures(ABC):
         pass
 
     @abstractmethod
-    def save(self, file_path, **config):
+    def save(self, file_path):
         """
         save the feature tools internal variables.
         Some of the variables are derived after fit_transform, so only saving config is not enough.
@@ -55,7 +55,7 @@ class BaseFeatures(ABC):
         pass
 
     @abstractmethod
-    def restore(self, file_path, **config):
+    def restore(self, **config):
         """
         Restore variables from file
         :param file_path: file contain saved parameters. i.e. some parameters are obtained during training,
