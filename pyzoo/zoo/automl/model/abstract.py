@@ -64,10 +64,10 @@ class BaseModel(ABC):
         pass
 
     @abstractmethod
-    def restore(self, file_path, **config):
+    def restore(self, model_path, **config):
         """
         restore model from model file and config.
-        :param file_path: the model file
+        :param model_path: the model file
         :param config: the config
         :return: the restored model
         """

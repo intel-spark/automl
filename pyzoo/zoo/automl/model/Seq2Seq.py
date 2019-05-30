@@ -21,6 +21,7 @@ from keras.layers import Input, LSTM, Dense
 import keras
 import os
 
+from zoo.automl.feature.time_sequence import TimeSequenceFeatureTransformer
 from zoo.automl.model.abstract import BaseModel
 from zoo.automl.common.util import *
 from zoo.automl.common.metrics import Evaluator
@@ -198,7 +199,7 @@ class LSTMSeq2Seq(BaseModel):
                               validation_data=validation_data,
                               batch_size=config.get('batch_size', 1024),
                               epochs=config.get('epochs', 1),
-                              verbose=0
+                              verbose=1
                               )
         # print(hist.history)
 
@@ -241,9 +242,9 @@ class LSTMSeq2Seq(BaseModel):
         """     
 #         model_path = file_path + "/seq2seq.h5"
 #         config_path = file_path + "/config.json"
-
-        if not os.path.isdir(file_path):
-            os.mkdir(file_path)
+#
+#         if not os.path.isdir(model_path):
+#             os.mkdir(model_path)
 
         self.model.save(model_path)
         
@@ -266,10 +267,10 @@ class LSTMSeq2Seq(BaseModel):
         # os.rename("seq2seq_tmp.h5", file_path)
         pass
 
-    def restore(self, file_path, **config):
+    def restore(self, model_path, **config):
         """
         restore model from file
-        :param file_path: the model file
+        :param model_path: the model file
         :param config: the trial config
         :return: the restored model
         """
@@ -308,3 +309,51 @@ class LSTMSeq2Seq(BaseModel):
             'batch_size'
         }
 
+
+if __name__ == "__main__":
+    model = LSTMSeq2Seq(check_optional_config=False)
+    train_df, val_df, test_df = load_nytaxi_data_df()
+    feature_transformer = TimeSequenceFeatureTransformer()
+    x_train, y_train = feature_transformer.fit_transform(train_df)
+    x_test, y_test = feature_transformer.transform(test_df, is_train=True)
+
+    y_train = np.expand_dims(y_train, axis=2)
+    y_test = np.expand_dims(y_test, axis=1)
+    print(y_train.shape)
+    print(y_test.shape)
+    print(x_train.shape)
+    print(x_test.shape)
+
+    config = {
+        # 'input_shape_x': x_train.shape[1],
+        # 'input_shape_y': x_train.shape[-1],
+        'selected_features':
+        'batch_size': 1024,
+        'epochs': 20
+    }
+    print("fit_eval:", model.fit_eval(x_train, y_train, validation_data=(x_test, y_test), **config))
+    print("evaluate:", model.evaluate(x_test, y_test))
+    y_pred = model.predict(x_test)
+
+    from matplotlib import pyplot as plt
+
+    y_test = np.squeeze(y_test)
+    y_pred = np.squeeze(y_pred)
+
+    def plot_result(y_test, y_pred):
+        # target column of dataframe is "value"
+        # past sequence length is 50
+        # pred_value = pred_df["value"].values
+        # true_value = test_df["value"].values[50:]
+        fig, axs = plt.subplots()
+
+        axs.plot(y_pred, color='red', label='predicted values')
+        axs.plot(y_test, color='blue', label='actual values')
+        axs.set_title('the predicted values and actual values (for the test data)')
+
+        plt.xlabel('test data index')
+        plt.ylabel('number of taxi passengers')
+        plt.legend(loc='upper left')
+        plt.show()
+
+    plot_result(y)

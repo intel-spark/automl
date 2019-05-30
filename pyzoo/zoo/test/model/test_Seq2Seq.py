@@ -135,14 +135,18 @@ class TestSeq2Seq:
         }
 
         dirname = tempfile.mkdtemp(prefix="automl_test_feature")
+        model_path = os.path.join(dirname, "weights_tune.h5")
+        config_path = os.path.join(dirname, "config.json")
 
         try:
             model_1 = LSTMSeq2Seq(check_optional_config=False)
             model_1.fit_eval(x_train_1, y_train_1, **config)
             predict_1_before = model_1.predict(x_test_1)
-            model_1.save(file_path=dirname)
+            model_1.save(model_path, config_path)
             new_model_1 = LSTMSeq2Seq(check_optional_config=False)
-            new_model_1.restore(file_path=dirname, **config)
+            local_config = load_config(config_path)
+            config.update(local_config)
+            new_model_1.restore(file_path=model_path, **config)
             predict_1_after = new_model_1.predict(x_test_1)
             assert np.allclose(predict_1_before, predict_1_after)
 
