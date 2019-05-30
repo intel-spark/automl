@@ -173,11 +173,13 @@ class TestTimeSequenceFeature:
 
         dirname = tempfile.mkdtemp(prefix="automl_test_feature_")
         try:
-            feature_scalar_path = os.path.join(dirname, "feature_scalar.npz")
+            feature_scalar_path = os.path.join(dirname, "feature_config.json")
             feat.save(file_path=feature_scalar_path)
-            new_ft = TimeSequenceFeatureTransformer(future_seq_len=1, dt_col="datetime",
-                                                    target_col="values", drop_missing=True)
-            new_ft.restore(file_path=feature_scalar_path, **config)
+            new_ft = TimeSequenceFeatureTransformer()
+            restore_config = load_config(feature_scalar_path)
+            config.update(restore_config)
+
+            new_ft.restore(**config)
             new_ft.transform(df[:-1], is_train=False)
             output_value_df = new_ft.post_processing(train_y)
             target_df = df[2:].copy().reset_index(drop=True)
